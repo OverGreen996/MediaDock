@@ -20,7 +20,7 @@ const errors = [];
 async function ui(kind, theme = 'light') {
   const context = await browser.newContext({viewport: {width: 368, height: 580}, colorScheme: theme, reducedMotion: 'reduce'});
   await context.addInitScript(({kind}) => {
-    const platform = ['youtube', 'shorts', 'bilibili', 'missing'].includes(kind);
+    const platform = ['youtube', 'shorts', 'missing'].includes(kind);
     window.testCalls = [];
     let storageListener;
     window.chrome = {
@@ -47,15 +47,13 @@ async function ui(kind, theme = 'light') {
 try {
   const yt = await ui('youtube');
   assert.equal(await yt.page.locator('#quality').inputValue(), '1080');
-  assert.equal(await yt.page.locator('#advanced').getAttribute('open'), null);
+  assert.equal(await yt.page.locator('#advanced').count(),0);
   assert.equal(await yt.page.locator('#history').getAttribute('open'), null);
   await yt.page.locator('#quality').selectOption('720');
   await yt.page.locator('#start').click();
   await yt.page.locator('#message').filter({hasText: '已取消儲存'}).waitFor();
   assert.equal((await yt.page.evaluate(() => testCalls.find(c => c.action === 'start'))).quality, '720');
   assert.equal((await yt.page.evaluate(() => testCalls.find(c => c.action === 'start'))).expected.sourceUrl, 'https://www.youtube.com/watch?v=YE7VzlLtp-4');
-  await yt.page.locator('#advanced summary').click(); await yt.page.locator('#mode').selectOption('audio');
-  assert.equal(await yt.page.locator('#quality').isDisabled(), true);
   await yt.page.locator('#refresh').click();
   assert.equal(await yt.page.evaluate(() => testCalls.findLast(c => c.action === 'scan').refresh), true);
   await yt.context.close();
@@ -69,32 +67,8 @@ try {
   assert.equal(shortsStart.quality, '2964');
   assert.equal(shortsStart.expected.sourceUrl, 'https://www.youtube.com/shorts/18NGQq7p3LY');
   await shorts.context.close();
-  const bili = await ui('bilibili');
-  await bili.page.locator('#advanced summary').click(); assert.equal(await bili.page.locator('#cookie-option').isVisible(), true);
-  await bili.page.locator('#cookies').check();
-  await bili.page.waitForFunction(() => testCalls.some(c => c.action === 'probe' && c.useCookies));
-  assert.equal(await bili.page.evaluate(() => testCalls.find(c => c.action === 'probe').url.includes('?p=3')), true);
-  await bili.context.close();
-  const generic = await ui('generic'); assert.equal(await generic.page.locator('#media-list .item').count(), 3);
-  assert.equal(await generic.page.evaluate(() => testCalls.some(c => c.action === 'status' || c.action === 'probe')), false);
-  await generic.page.locator('#media-list .primary').first().click();
-  assert.equal(await generic.page.evaluate(() => testCalls.some(c => c.action === 'start' && c.url.endsWith('intro-1080p.mp4'))), true);
-  await generic.page.locator('#media-list .primary').last().click();
-  assert.equal(await generic.page.evaluate(() => testCalls.some(c => c.action === 'start' && c.url.endsWith('master.m3u8'))), true);
-  await generic.context.close();
-  const multi = await ui('vimeo'); assert.equal(await multi.page.locator('#site').textContent(), 'Vimeo');
-  assert.equal(await multi.page.evaluate(() => testCalls.some(c => c.action === 'probe')), false); await multi.context.close();
-  for (const kind of ['missing', 'empty']) { const p = await ui(kind); if (kind === 'missing') assert.equal(await p.page.locator('#start').isDisabled(), false); await p.context.close(); }
-  for (const kind of ['youtube', 'generic']) { const p = await ui(kind, 'dark'); await p.context.close(); }
-  const fixture = await browser.newPage();
-  await fixture.setContent('<video src="https://cdn.example.com/movie.mp4"></video><video></video><audio><source src="https://cdn.example.com/song.m4a" type="audio/mp4"></audio><a href="https://cdn.example.com/master.m3u8">串流</a><a href="https://cdn.example.com/pic.jpg">image</a><video src="blob:https://example.com/abc"></video>');
-  const scan = fs.readFileSync(path.join(root, 'extension/scan.js'), 'utf8');
-  const scanResult = await fixture.evaluate(scan);
-  assert.equal(scanResult.media.length, 3);
-  assert.equal(scanResult.media.some(x => x.url.includes('null') || x.url.startsWith('blob:')), false);
-  await fixture.evaluate(() => { const frame = document.createElement('iframe'); document.body.append(frame); frame.contentDocument.body.innerHTML = '<video src="https://cdn.example.com/embedded.mp4"></video>'; });
-  assert.equal((await fixture.evaluate(scan)).media.length, 4);
-  await fixture.close();
+  for(const kind of ['bilibili','generic','vimeo','empty']){const p=await ui(kind);assert.equal(await p.page.locator('#video').isVisible(),false);assert.equal(await p.page.evaluate(()=>testCalls.some(c=>c.action==='probe')),false);assert.equal(await p.page.locator('#media,#watch,#cookies').count(),0);await p.context.close();}
+  const dark=await ui('youtube','dark');await dark.context.close();
   assert.deepEqual(errors, []);
   // Actual MV3 load and stable ID verification, in a separate temporary Edge profile.
   const extension = path.join(root, 'extension');
@@ -103,5 +77,5 @@ try {
   assert.ok(worker.url().includes('fhjcedbbonnlkilcklhodjejolannode'));
   const manifest = await worker.evaluate(() => chrome.runtime.getManifest()); assert.equal(manifest.manifest_version, 3);
   await ctx.close();
-  console.log('PASS: platform auto analysis, current Bilibili part, quality/save cancellation, generic resource selection, dark/light UI, DOM scanner, no general-site helper startup, Edge MV3 load.');
+  console.log('PASS: YouTube quality/Shorts/save cancellation, other sites disabled, no scanner/login/advanced controls, dark/light UI and Edge MV3 load.');
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

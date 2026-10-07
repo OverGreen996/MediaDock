@@ -4,15 +4,22 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 const out=path.resolve('test-output/pure');fs.mkdirSync(out,{recursive:true});
 const kind=process.argv[2]||'youtube',quality=process.argv[3]||'2160';
-const ctx=await chromium.launchPersistentContext(path.join(out,`edge-profile-${kind}-${quality}-${Date.now()}`),{channel:'msedge',headless:true,acceptDownloads:true,args:[`--disable-extensions-except=${path.resolve('extension')}`,`--load-extension=${path.resolve('extension')}`]});
+assert.ok(['youtube','shorts'].includes(kind),'Only YouTube and Shorts are supported');
+const forceHls=process.argv.includes('--force-hls');
+const realPage=process.argv.includes('--real-page');
+const timeoutSeconds=Number(process.argv.find(a=>a.startsWith('--timeout-seconds='))?.split('=')[1]||360);assert.ok(Number.isInteger(timeoutSeconds)&&timeoutSeconds>=30&&timeoutSeconds<=1800,'Test timeout must be between 30 and 1800 seconds');
+ const suffix=realPage?'-player':forceHls?'-hls':'';
+const ctx=await chromium.launchPersistentContext(path.join(out,`edge-profile-${kind}-${quality}${suffix}-${Date.now()}`),{channel:'msedge',headless:true,acceptDownloads:true,args:[`--disable-extensions-except=${path.resolve('extension')}`,`--load-extension=${path.resolve('extension')}`]});
 try{
  const worker=ctx.serviceWorkers()[0]||await ctx.waitForEvent('serviceworker');worker.on('console',m=>console.log('WORKER',m.text()));
+ if(process.argv.includes('--debug-headers'))await worker.evaluate(()=>chrome.webRequest.onBeforeSendHeaders.addListener(d=>{if(d.tabId>=0)return;console.log('MEDIA HEADERS',JSON.stringify({initiator:d.initiator,client:new URL(d.url).searchParams.get('c'),headers:d.requestHeaders.filter(h=>['user-agent','origin','referer','sec-fetch-site'].includes(h.name.toLowerCase()))}));},{urls:['https://*.googlevideo.com/*']},['requestHeaders','extraHeaders']));
+ if(forceHls)await worker.evaluate(({forceHls})=>{const original=globalThis.fetch;globalThis.fetch=(input,init)=>{const u=new URL(typeof input==='string'?input:input.url);if(forceHls&&u.hostname.endsWith('.googlevideo.com')&&u.pathname==='/videoplayback')return Promise.resolve(new Response('',{status:403}));return original(input,init);};},{forceHls});
  const page=await ctx.newPage();
- page.on('console',m=>{if(m.type()==='error')console.log('PAGE ERROR',m.text());});
- await ctx.route('https://www.youtube.com/watch?**',r=>r.request().isNavigationRequest()?r.fulfill({contentType:'text/html',body:'<html><title>YouTube pure extension validation</title><body>Video page</body></html>'}):r.continue());
- await ctx.route('https://www.youtube.com/shorts/**',r=>r.request().isNavigationRequest()?r.fulfill({contentType:'text/html',body:'<html><title>Shorts validation</title><body>Shorts page</body></html>'}):r.continue());
- await ctx.route('https://www.bilibili.com/video/**',r=>r.request().isNavigationRequest()?r.fulfill({contentType:'text/html',body:'<html><title>Bilibili validation</title><body>Bilibili page</body></html>'}):r.continue());
- await page.goto(kind==='bili'?'https://www.bilibili.com/video/BV15z4y1U7HS/':kind==='shorts'?'https://www.youtube.com/shorts/18NGQq7p3LY':'https://www.youtube.com/watch?v=a9LDPn-MO4I');
+ page.on('pageerror',e=>console.log('PAGE SCRIPT ERROR',e.message));
+ if(!realPage)await ctx.route('https://www.youtube.com/watch?**',r=>r.request().isNavigationRequest()?r.fulfill({contentType:'text/html',body:'<html><title>YouTube pure extension validation</title><body>Video page</body></html>'}):r.continue());
+ if(!realPage)await ctx.route('https://www.youtube.com/shorts/**',r=>r.request().isNavigationRequest()?r.fulfill({contentType:'text/html',body:'<html><title>Shorts validation</title><body>Shorts page</body></html>'}):r.continue());
+ await page.goto(process.argv.find(a=>a.startsWith('https://'))||(kind==='shorts'?'https://www.youtube.com/shorts/18NGQq7p3LY':'https://www.youtube.com/watch?v=a9LDPn-MO4I'));
+ if(realPage){await page.waitForSelector('video');await page.evaluate(async()=>{const v=document.querySelector('video');v.muted=true;await v.play().catch(()=>{});});await page.waitForTimeout(20000);}
  await worker.evaluate(()=>chrome.action.openPopup());
  const cdp=await ctx.browser().newBrowserCDPSession();
  await cdp.send('Browser.setDownloadBehavior',{behavior:'allow',downloadPath:out,eventsEnabled:true});
@@ -27,15 +34,19 @@ try{
  console.log('UI',await evaluate(`({quality:document.querySelector('#quality').value,options:[...document.querySelector('#quality').options].map(o=>o.textContent),message:document.querySelector('#message').textContent})`));
  assert.equal(await evaluate(`document.querySelector('#start').disabled`),false,'Platform parsing failed');
  await evaluate(`document.querySelector('#quality').value=${JSON.stringify(quality)};document.querySelector('#start').click();`);
- let jobs,last='';
- for(let i=0;i<360;i++){
+ const expectFailure=process.argv.includes('--expect-failure');let jobs,last='',preflightError='';
+ for(let i=0;i<timeoutSeconds;i++){
    jobs=(await worker.evaluate(()=>chrome.storage.local.get('jobs'))).jobs||[];
    const j=jobs[0];const status=j?j.status+' '+Math.round(j.progress||0):'waiting';if(status!==last){console.log(status,j?.error||'');last=status;}
+   preflightError=await evaluate(`document.querySelector('#message').dataset.error==='true'?document.querySelector('#message').textContent:''`);if(preflightError){console.log('PREFLIGHT ERROR',preflightError);break;}
    if(j&&['completed','failed','cancelled'].includes(j.status))break;
    await new Promise(r=>setTimeout(r,1000));
  }
- fs.writeFileSync(path.join(out,`${kind}-${quality}-report.json`),JSON.stringify(jobs,null,2));
- assert.equal(jobs[0]?.status,'completed',jobs[0]?.error||'Timeout');
+ if(expectFailure){assert.ok(preflightError||jobs[0]?.status==='failed','Expected a real rejected source');assert.ok(!(await worker.evaluate(()=>chrome.downloads.search({}))).length,'Rejected source must never be saved');fs.writeFileSync(path.join(out,`${kind}-${quality}-failure-report.json`),JSON.stringify({url:page.url(),error:preflightError||jobs[0]?.error,jobs},null,2));console.log('PASS: rejected source, no file saved');}
+ else {
+ fs.writeFileSync(path.join(out,`${kind}-${quality}${suffix}-report.json`),JSON.stringify(jobs,null,2));
+ assert.equal(jobs[0]?.status,'completed',preflightError||jobs[0]?.error||'Timeout');
  const files=await worker.evaluate(()=>chrome.downloads.search({}));console.log('FILE',files.map(f=>({filename:f.filename,state:f.state,bytes:f.fileSize,mime:f.mime})));
- fs.writeFileSync(path.join(out,`${kind}-${quality}-files.json`),JSON.stringify(files.map(f=>({filename:f.filename,state:f.state,bytes:f.fileSize,mime:f.mime})),null,2));
+ fs.writeFileSync(path.join(out,`${kind}-${quality}${suffix}-files.json`),JSON.stringify(files.map(f=>({filename:f.filename,state:f.state,bytes:f.fileSize,mime:f.mime})),null,2));
+ }
 }finally{await ctx.close();}

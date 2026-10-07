@@ -1,18 +1,32 @@
 import {Input,UrlSource,BlobSource,ALL_FORMATS,Output,Mp4OutputFormat,WebMOutputFormat,StreamTarget,EncodedPacketSink,EncodedVideoPacketSource,EncodedAudioPacketSource,VideoSampleSink,AudioSampleSink} from 'mediabunny';
 import {sha256} from '@noble/hashes/sha2.js';
-import {filename,publicUrl} from '../extension/media.js';
+import {filename} from '../extension/media.js';
+import {cdnUrl} from '../extension/platforms.js';
+import {openSabr} from './sabr.js';
 
 const tasks=new Map();
 const rootPromise=navigator.storage.getDirectory();
-const cleanPromise=rootPromise.then(async root=>{for await(const name of root.keys())if(/^job-[\w-]+(?:-\d+)?\.tmp$/.test(name))await root.removeEntry(name).catch(()=>{});});
+const cleanPromise=rootPromise.then(async root=>{for await(const name of root.keys())if(/^job-[\w-]+(?:-sabr-[01]|-\d+)?\.tmp$/.test(name))await root.removeEntry(name).catch(()=>{});});
 function patch(plan,status,progress=0,extra={}){postMessage({type:'job',job:{id:plan.id,status,progress,...extra}});}
 function progress(plan,status){let last=0;return value=>{if(Date.now()-last>800){last=Date.now();patch(plan,status,Math.max(0,Math.min(99,value)));}};}
 function durationTolerance(duration){return Math.max(0.15,Math.min(2,duration*0.005));}
-function checkedFetch(controller){return async(input,init={})=>{
+function checkedFetch(controller,plan){const preferred=new Map();return async(input,init={})=>{
   const url=typeof input==='string'?input:input.url||String(input);
-  if(!publicUrl(url))throw new Error('媒體包含不支援的網址。');
-  const response=await fetch(input,{...init,credentials:'omit',signal:AbortSignal.any([controller.signal,init.signal||AbortSignal.timeout(90000)])});
-  if(!response.ok)throw new Error(`來源回應 ${response.status}，請重新掃描。`);
+  if(!cdnUrl(url,'YouTube'))throw new Error('媒體包含不支援的網址。');
+  const format=plan.formats.find(f=>f.url===url),backups=format?.backups||[];
+  let response,reason;
+  for(const source of [...new Set([preferred.get(url),url,...backups].filter(Boolean))].slice(0,4)){
+    if(!cdnUrl(source,'YouTube'))continue;
+    try{
+      const request=source===url?input:input instanceof Request?new Request(source,input):source;
+      const timeout=new AbortController(),timer=setTimeout(()=>timeout.abort(new Error('來源連線逾時。')),45000);
+      let r;try{r=await fetch(request,{...init,credentials:'omit',signal:AbortSignal.any([controller.signal,...(init.signal?[init.signal]:[]),timeout.signal])});}finally{clearTimeout(timer);}
+      if(r.ok){response=r;if(format)preferred.set(url,source);break;}
+      reason=`來源回應 ${r.status}`;await r.body?.cancel().catch(()=>{});
+      if(![403,404,412,429,500,502,503,504].includes(r.status))break;
+    }catch(error){controller.signal.throwIfAborted();reason=error.message;}
+  }
+  if(!response)throw new Error(`${reason||'來源連線失敗'}，請重新讀取。`);
   const type=response.headers.get('content-type')||'';
   if(/text\/html|application\/json/.test(type))throw new Error('來源回傳網頁或錯誤訊息，並非影片。');
   if(/\.m3u8(?:[?#]|$)/i.test(url)||/mpegurl/.test(type)){
@@ -23,24 +37,28 @@ function checkedFetch(controller){return async(input,init={})=>{
   }
   return response;
 };}
-async function downloadSegments(f,plan,index,fetcher,task){
-  const root=await rootPromise,name=`job-${plan.id}-${index}.tmp`;task.names.push(name);
-  const handle=await root.getFileHandle(name,{create:true}),access=await handle.createSyncAccessHandle();
-  let at=0;const update=progress(plan,'downloading');
-  try{for(let i=0;i<f.segments.length;i++){
-    const response=await fetcher(f.segments[i]);const reader=response.body.getReader();
-    try{for(;;){const {value,done}=await reader.read();if(done)break;at+=access.write(value,{at});task.controller.signal.throwIfAborted();}}
-    finally{reader.releaseLock();}update(i/f.segments.length*100);
-  }access.flush();}finally{access.close();}
-  return new BlobSource(await handle.getFile());
-}
 async function hash(file,signal){const digest=sha256.create();const reader=file.stream().getReader();try{for(;;){signal.throwIfAborted();const {value,done}=await reader.read();if(done)break;digest.update(value);}}finally{reader.releaseLock();}return Array.from(digest.digest(),b=>b.toString(16).padStart(2,'0')).join('');}
+async function downloadSabr(plan,task,fetcher){
+ const [video,audio]=plan.formats;if(!video?.video||!audio?.audio||video.audio)throw new Error('YouTube 串流缺少獨立影音格式。');
+ const stream=await openSabr(plan.sabr,video.raw,audio.raw,fetcher),abort=()=>stream.abort();
+ task.controller.signal.addEventListener('abort',abort,{once:true});
+ const update=progress(plan,'downloading'),total=plan.formats.reduce((n,f)=>n+(f.raw?.contentLength||0),0);let bytes=0;
+ try{
+ return await Promise.all([stream.videoStream,stream.audioStream].map(async(source,index)=>{
+   const root=await rootPromise,name=`job-${plan.id}-sabr-${index}.tmp`;task.names.push(name);
+   const handle=await root.getFileHandle(name,{create:true}),access=await handle.createSyncAccessHandle(),reader=source.getReader();let at=0;
+   try{for(;;){task.controller.signal.throwIfAborted();let timer;const {value,done}=await Promise.race([reader.read(),new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('YouTube 串流讀取逾時，請確認主影片可播放後再試。')),45000);})]).finally(()=>clearTimeout(timer));if(done)break;const written=access.write(value,{at});if(written!==value.length)throw new Error('瀏覽器媒體暫存空間不足。');at+=written;bytes+=value.length;if(total)update(bytes/total*100);}access.flush();}
+   finally{access.close();reader.releaseLock();}
+   if(at<128)throw new Error('YouTube 串流沒有完整影音資料。');return new BlobSource(await handle.getFile(),{maxCacheSize:2*1024*1024});
+ }));
+ }catch(error){abort();throw error;}finally{task.controller.signal.removeEventListener('abort',abort);}
+}
 export async function verifyFile(file,plan,signal=new AbortController().signal,onProgress=()=>{}){
   const input=new Input({source:new BlobSource(file,{maxCacheSize:2*1024*1024}),formats:ALL_FORMATS});
   try{
     const video=await input.getPrimaryVideoTrack(),audio=await input.getPrimaryAudioTrack();
     if(plan.mode!=='audio'&&!video)throw new Error('檔案沒有影像。');
-    if(plan.mode==='audio'&&!audio||plan.expected.platform!=='網站'&&plan.mode!=='audio'&&!audio)throw new Error('檔案沒有聲音。');
+    if(plan.mode==='audio'&&!audio||plan.mode!=='audio'&&!audio)throw new Error('檔案沒有聲音。');
     const duration=await input.computeDuration();
     if(!Number.isFinite(duration)||duration<=0)throw new Error('影片片長不正確。');
     if(plan.duration>0&&Math.abs(duration-plan.duration)>durationTolerance(plan.duration))throw new Error(`片長不符：預期 ${plan.duration.toFixed(1)} 秒，實際 ${duration.toFixed(1)} 秒。`);
@@ -62,22 +80,23 @@ export async function verifyFile(file,plan,signal=new AbortController().signal,o
       }
       if(!audioSamples||audioEnd<duration-durationTolerance(duration))throw new Error('聲音未完整解碼至結尾。');
     }
-    return {fullDecode:true,identityMatched:true,sourceUrl:plan.expected.sourceUrl,sourceId:plan.expected.id||'',cid:plan.expected.cid||'',videoWidth:video?.displayWidth||0,videoHeight:video?.displayHeight||0,duration,videoFrames:frames,audioSamples,hasAudio:!!audio,sha256:await hash(file,signal),size:file.size,compatibilityConverted:false};
+    return {fullDecode:true,identityMatched:true,sourceUrl:plan.expected.sourceUrl,sourceId:plan.expected.id||'',videoWidth:video?.displayWidth||0,videoHeight:video?.displayHeight||0,duration,videoFrames:frames,audioSamples,hasAudio:!!audio,sha256:await hash(file,signal),size:file.size,compatibilityConverted:false};
   }finally{input.dispose();}
 }
 async function run(plan){
   const task={controller:new AbortController(),names:[],inputs:[]};tasks.set(plan.id,task);
-  const signal=task.controller.signal,fetcher=checkedFetch(task.controller),update=progress(plan,'downloading');
+  const signal=task.controller.signal,fetcher=checkedFetch(task.controller,plan),update=progress(plan,'downloading');
   let access,output;
   try{
     await cleanPromise;signal.throwIfAborted();
     patch(plan,'downloading');
+    const sabrSources=plan.sabr?await downloadSabr(plan,task,fetcher):null;
     const selected=[];
     for(let i=0;i<plan.formats.length;i++){
-      const f=plan.formats[i];const source=f.segments?await downloadSegments(f,plan,i,fetcher,task):new UrlSource(f.url,{maxCacheSize:4*1024*1024,parallelism:1,fetchFn:fetcher,getRetryDelay:(attempts,error)=>!signal.aborted&&error instanceof TypeError&&attempts<3?attempts:null});
+      const f=plan.formats[i];const source=sabrSources?sabrSources[i]:new UrlSource(f.url,{maxCacheSize:4*1024*1024,parallelism:1,fetchFn:fetcher,getRetryDelay:(attempts,error)=>!signal.aborted&&error instanceof TypeError&&attempts<3?attempts:null});
       const input=new Input({source,formats:ALL_FORMATS});task.inputs.push(input);
       const video=f.video&&plan.mode!=='audio'?await input.getPrimaryVideoTrack():null,audio=f.audio?await input.getPrimaryAudioTrack():null;
-      if(f.video&&plan.mode!=='audio'&&!video||f.audio&&!audio&&(plan.expected.platform!=='網站'||plan.mode==='audio'))throw new Error('來源缺少預期的影音軌道。');
+      if(f.video&&plan.mode!=='audio'&&!video||f.audio&&!audio&&true)throw new Error('來源缺少預期的影音軌道。');
       if(video)selected.push({track:video,type:'video'});if(audio)selected.push({track:audio,type:'audio'});
     }
     if(!selected.length)throw new Error('來源不含可用的媒體。');
@@ -117,7 +136,7 @@ async function run(plan){
     signal.throwIfAborted();postMessage({type:'file',id:plan.id,file,verification,filename:filename(plan.title,`https://media.invalid/file.${ext}`)});
   }catch(e){
     access?.close();await output?.cancel().catch(()=>{});task.inputs.forEach(i=>i.dispose());
-    patch(plan,signal.aborted?'cancelled':'failed',0,{error:signal.aborted?'':e.message||'下載或驗證失敗。'});
+    patch(plan,signal.aborted?'cancelled':'failed',0,{error:signal.aborted?'':/attestation required|protection status/i.test(e.message)?'YouTube 拒絕這次播放驗證，尚未取得完整影片，不能儲存。':e.message||'下載或驗證失敗。'});
   }
 }
 self.onmessage=async({data})=>{
