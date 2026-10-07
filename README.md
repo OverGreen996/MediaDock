@@ -6,11 +6,13 @@
 
 **選畫質，下載，存到你要的位置。**
 
-Edge／Chrome 127+ · 繁體中文 · 0.4.0 純擴充版
+Edge／Chrome 127+ · 繁體中文 · 0.4.1 開發中，尚未發布
 
 **[下載擴充功能 ZIP](https://github.com/OverGreen996/MediaDock/releases/download/v0.4.0/MediaDock-Extension.zip)** · [版本與校驗值](https://github.com/OverGreen996/MediaDock/releases/tag/v0.4.0) · [驗證紀錄](VALIDATION.md)
 
 </div>
+
+**已知問題：目前公開的 0.4.0 部分一般 YouTube 影片點下載後回應 403，Bili 也有來源失敗回報。0.4.1 正在處理；已重現 `mqK1eU5k2CQ` 的 403，尚未解決。下方 ZIP 仍是 0.4.0，不要把重新安裝舊版當作修復。**
 
 解壓、載入擴充功能，就能開始。所有媒體處理在瀏覽器內完成；使用者無須安裝 Node.js、Python、FFmpeg、yt-dlp 或本機助手。
 
@@ -32,6 +34,10 @@ GitHub 原始碼下載包則選擇裡面的 `extension/` 資料夾。YouTube 已
 從 0.3 升級：移除舊版擴充，再載入 0.4；移除擴充會清除舊下載紀錄，已儲存的影片仍保留。0.4 不使用舊本機助手。0.3 的程式與安裝說明保留在 [舊版 Release](https://github.com/OverGreen996/MediaDock/releases/tag/v0.3.0)。固定擴充 ID：`fhjcedbbonnlkilcklhodjejolannode`。
 
 ## 使用
+
+0.4.1 開發中補上「API 有畫質，但媒體網址不能下載」的處理：先讀取所選影音的開頭與結尾，避免只憑開頭可讀就誤判完整來源可用；YouTube 失敗時嘗試另一個客戶端及同畫質 HLS，Bili 優先讀取目前播放器的登入影音資料，並補上 WBI 查詢、CDN 備援與下載期間的切換。只嘗試同一來源與所選畫質，失敗會明確報錯。
+
+新增故障測試：刻意令 YouTube 直接網址回傳 403，仍完成同一影片的 1080p HLS 下載與全部影音解碼；Bili 主要 CDN 無法使用時，備援流程也完成公開 480p 下載。**實際回報的 YouTube `mqK1eU5k2CQ` 沒有可用備援，完整下載仍失敗。** 通過的示例不能代表這個問題已解決，也不代表所有網站、帳號與地區均可下載。
 
 開啟影片頁，點 MediaDock，選畫質後按「下載並選擇儲存位置」。**先下載、合併與完整驗證，完成後才跳出瀏覽器的另存新檔視窗。** 沒有通過驗證的來源不會提供儲存。
 
@@ -66,7 +72,7 @@ YouTube 下載前重新核對影片 ID；Bilibili 核對 BV／AV、CID、分 P �
 | YouTube Shorts | 2160 × 2964 · MP4／VP9／AAC | 保留直向尺寸，上述驗證通過 |
 | Bilibili 公開影片 | 480p · MP4／H.264／AAC | 測試瀏覽器未登入，公開可用畫質驗證通過 |
 
-另通過 **16 項核心測試**與真實瀏覽器 MP4／HLS／DASH 案例；偽裝 MP4 的 HTML、截斷檔案會失敗且不儲存；取消、暫存清理與閒置引擎釋放均通過。Chrome 正式版及 Bili 已登入 1080p 尚未實測。完整方法與限制見 [VALIDATION.md](VALIDATION.md)。
+另通過 **22 項核心測試**與真實瀏覽器 MP4／HLS／DASH 案例；偽裝 MP4 的 HTML、截斷檔案會失敗且不儲存；取消、暫存清理與閒置引擎釋放均通過。Chrome 正式版及 Bili 已登入 1080p 尚未實測。完整方法與限制見 [VALIDATION.md](VALIDATION.md)。
 
 ## 介面預覽
 

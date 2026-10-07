@@ -4,15 +4,18 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 const out=path.resolve('test-output/pure');fs.mkdirSync(out,{recursive:true});
 const kind=process.argv[2]||'youtube',quality=process.argv[3]||'2160';
-const ctx=await chromium.launchPersistentContext(path.join(out,`edge-profile-${kind}-${quality}-${Date.now()}`),{channel:'msedge',headless:true,acceptDownloads:true,args:[`--disable-extensions-except=${path.resolve('extension')}`,`--load-extension=${path.resolve('extension')}`]});
+const forceHls=process.argv.includes('--force-hls'),forceBackup=process.argv.includes('--force-backup');
+const suffix=forceHls?'-hls':forceBackup?'-backup':'';
+const ctx=await chromium.launchPersistentContext(path.join(out,`edge-profile-${kind}-${quality}${suffix}-${Date.now()}`),{channel:'msedge',headless:true,acceptDownloads:true,args:[`--disable-extensions-except=${path.resolve('extension')}`,`--load-extension=${path.resolve('extension')}`]});
 try{
  const worker=ctx.serviceWorkers()[0]||await ctx.waitForEvent('serviceworker');worker.on('console',m=>console.log('WORKER',m.text()));
+ if(forceHls||forceBackup)await worker.evaluate(({forceHls,forceBackup})=>{const original=globalThis.fetch;globalThis.fetch=(input,init)=>{const u=new URL(typeof input==='string'?input:input.url);if(forceHls&&u.hostname.endsWith('.googlevideo.com')&&u.pathname==='/videoplayback'||forceBackup&&u.hostname.endsWith('.bilivideo.com'))return Promise.resolve(new Response('',{status:403}));return original(input,init);};},{forceHls,forceBackup});
  const page=await ctx.newPage();
  page.on('console',m=>{if(m.type()==='error')console.log('PAGE ERROR',m.text());});
  await ctx.route('https://www.youtube.com/watch?**',r=>r.request().isNavigationRequest()?r.fulfill({contentType:'text/html',body:'<html><title>YouTube pure extension validation</title><body>Video page</body></html>'}):r.continue());
  await ctx.route('https://www.youtube.com/shorts/**',r=>r.request().isNavigationRequest()?r.fulfill({contentType:'text/html',body:'<html><title>Shorts validation</title><body>Shorts page</body></html>'}):r.continue());
  await ctx.route('https://www.bilibili.com/video/**',r=>r.request().isNavigationRequest()?r.fulfill({contentType:'text/html',body:'<html><title>Bilibili validation</title><body>Bilibili page</body></html>'}):r.continue());
- await page.goto(kind==='bili'?'https://www.bilibili.com/video/BV15z4y1U7HS/':kind==='shorts'?'https://www.youtube.com/shorts/18NGQq7p3LY':'https://www.youtube.com/watch?v=a9LDPn-MO4I');
+ await page.goto(process.argv.find(a=>a.startsWith('https://'))||(kind==='bili'?'https://www.bilibili.com/video/BV15z4y1U7HS/':kind==='shorts'?'https://www.youtube.com/shorts/18NGQq7p3LY':'https://www.youtube.com/watch?v=a9LDPn-MO4I'));
  await worker.evaluate(()=>chrome.action.openPopup());
  const cdp=await ctx.browser().newBrowserCDPSession();
  await cdp.send('Browser.setDownloadBehavior',{behavior:'allow',downloadPath:out,eventsEnabled:true});
@@ -27,15 +30,19 @@ try{
  console.log('UI',await evaluate(`({quality:document.querySelector('#quality').value,options:[...document.querySelector('#quality').options].map(o=>o.textContent),message:document.querySelector('#message').textContent})`));
  assert.equal(await evaluate(`document.querySelector('#start').disabled`),false,'Platform parsing failed');
  await evaluate(`document.querySelector('#quality').value=${JSON.stringify(quality)};document.querySelector('#start').click();`);
- let jobs,last='';
+ const expectFailure=process.argv.includes('--expect-failure');let jobs,last='',preflightError='';
  for(let i=0;i<360;i++){
    jobs=(await worker.evaluate(()=>chrome.storage.local.get('jobs'))).jobs||[];
    const j=jobs[0];const status=j?j.status+' '+Math.round(j.progress||0):'waiting';if(status!==last){console.log(status,j?.error||'');last=status;}
+   preflightError=await evaluate(`document.querySelector('#message').dataset.error==='true'?document.querySelector('#message').textContent:''`);if(preflightError){console.log('PREFLIGHT ERROR',preflightError);break;}
    if(j&&['completed','failed','cancelled'].includes(j.status))break;
    await new Promise(r=>setTimeout(r,1000));
  }
- fs.writeFileSync(path.join(out,`${kind}-${quality}-report.json`),JSON.stringify(jobs,null,2));
- assert.equal(jobs[0]?.status,'completed',jobs[0]?.error||'Timeout');
+ if(expectFailure){assert.ok(preflightError||jobs[0]?.status==='failed','Expected a real rejected source');assert.ok(!(await worker.evaluate(()=>chrome.downloads.search({}))).length,'Rejected source must never be saved');fs.writeFileSync(path.join(out,`${kind}-${quality}-failure-report.json`),JSON.stringify({url:page.url(),error:preflightError||jobs[0]?.error,jobs},null,2));console.log('PASS: rejected source, no file saved');}
+ else {
+ fs.writeFileSync(path.join(out,`${kind}-${quality}${suffix}-report.json`),JSON.stringify(jobs,null,2));
+ assert.equal(jobs[0]?.status,'completed',preflightError||jobs[0]?.error||'Timeout');
  const files=await worker.evaluate(()=>chrome.downloads.search({}));console.log('FILE',files.map(f=>({filename:f.filename,state:f.state,bytes:f.fileSize,mime:f.mime})));
- fs.writeFileSync(path.join(out,`${kind}-${quality}-files.json`),JSON.stringify(files.map(f=>({filename:f.filename,state:f.state,bytes:f.fileSize,mime:f.mime})),null,2));
+ fs.writeFileSync(path.join(out,`${kind}-${quality}${suffix}-files.json`),JSON.stringify(files.map(f=>({filename:f.filename,state:f.state,bytes:f.fileSize,mime:f.mime})),null,2));
+ }
 }finally{await ctx.close();}

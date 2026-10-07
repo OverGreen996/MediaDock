@@ -1,5 +1,6 @@
 import {publicUrl,mediaKind,siteName} from './media.js';
-import {youtubeProbe,readBilibiliPage,bilibiliResult,selectFormats} from './platforms.js';
+import {youtubeProbe,readBilibiliPage,readBilibiliApi,bilibiliResult} from './platforms.js';
+import {prepareFormats} from './network.js';
 let historyWrite=Promise.resolve(),creating,idleTimer;
 const watched=new Set(),candidates=new Map(),probes=new Map(),running=new Set();
 const ready=chrome.storage.session.get(['watched','candidates']).then(d=>{(d.watched||[]).forEach(id=>watched.add(id));Object.entries(d.candidates||{}).forEach(([id,list])=>candidates.set(Number(id),list));});
@@ -16,7 +17,7 @@ async function probe(url,useLogin=true,refresh=false){
     const tab=await currentTab();if(tab.url!==url)throw new Error('目前影片已切換，請重新掃描。');
     const [r]=await chrome.scripting.executeScript({target:{tabId:tab.id},world:'MAIN',func:readBilibiliPage,args:[!!useLogin]});
     let raw=r?.result;
-    if(!raw||raw.error)raw=await readBilibiliPage(!!useLogin,url);
+    if(!raw||raw.error)raw=await readBilibiliApi(url,!!useLogin);
     if(raw.error)throw new Error(raw.error);info=bilibiliResult(raw,url);
   }else throw new Error('此網站請從媒體清單選擇來源；專用解析支援 YouTube 與 Bilibili。');
   probes.set(key,{time:Date.now(),data:info});if(probes.size>12)probes.delete(probes.keys().next().value);return info;
@@ -28,7 +29,7 @@ async function start(m){
     if(m.expected?.sourceUrl!==url)throw new Error('請先掃描目前影片，再開始下載。');
     const info=await probe(url,m.useCookies!==false,true);
     if(info.identity.id!==m.expected.id||info.identity.cid!==m.expected.cid)throw new Error('影片來源已改變，請重新掃描。');
-    const formats=selectFormats(info,m.quality,m.mode==='audio',m.container);
+    const formats=await prepareFormats(info,m);
     plan={title:info.title,formats,expected:info.identity,duration:formats[0].duration||info.duration,quality:m.quality,mode:m.mode||'video',container:m.container||'mp4'};
   }else{
     const kind=mediaKind(url,m.mime);if(!kind)throw new Error('找不到可辨識的媒體格式。');
@@ -41,7 +42,7 @@ async function start(m){
 async function handle(m){
   await ready; await engineReady;
   switch(m.action){
-    case 'status':return {ready:true,version:'0.4.0',engine:'browser'};
+    case 'status':return {ready:true,version:'0.4.1',engine:'browser'};
     case 'probe':{const u=publicUrl(m.url);if(!u)throw new Error('網址格式不支援。');return probe(u,m.useCookies!==false);}
     case 'start':case 'direct':return start(m);
     case 'cancel':{const {jobs=[]}=await chrome.storage.local.get('jobs'),j=jobs.find(j=>j.id===m.id);if(!j||!['queued','downloading','processing','verifying','saving'].includes(j.status))return {};if(j.status==='saving'&&j.downloadId==null)throw new Error('請在「另存新檔」視窗按取消。');if(j.downloadId!=null)await chrome.downloads.cancel(j.downloadId).catch(()=>{});await chrome.runtime.sendMessage({target:'engine',action:'cancel',id:j.id}).catch(()=>{});return {};}
@@ -80,7 +81,19 @@ chrome.tabs.onRemoved.addListener(id=>{ready.then(()=>{if(!watched.has(id)&&!can
 async function settle(downloadId,state,error){await historyWrite;const {jobs=[]}=await chrome.storage.local.get('jobs'),j=jobs.find(j=>j.downloadId===downloadId);if(!j||!running.has(j.id))return;await updateJob({id:j.id,status:state==='complete'?'completed':error==='USER_CANCELED'?'cancelled':'failed',progress:state==='complete'?100:0,error:state==='complete'||error==='USER_CANCELED'?'':error||'儲存中斷'});running.delete(j.id);await chrome.runtime.sendMessage({target:'engine',action:'release',id:j.id}).catch(()=>{});releaseIdle();}
 chrome.downloads.onChanged.addListener(d=>{if(['complete','interrupted'].includes(d.state?.current))settle(d.id,d.state.current,d.error?.current);});
 async function initialize(){
-  await chrome.declarativeNetRequest.updateDynamicRules({removeRuleIds:[1,2,3],addRules:[{id:1,priority:1,action:{type:'modifyHeaders',requestHeaders:[{header:'Referer',operation:'set',value:'https://www.bilibili.com/'}]},condition:{initiatorDomains:[chrome.runtime.id],requestDomains:['bilivideo.com','bilivideo.cn','hdslb.com','akamaized.net'],resourceTypes:['xmlhttprequest']}},{id:2,priority:1,action:{type:'modifyHeaders',requestHeaders:[...['Origin','Sec-Fetch-Dest','Sec-Fetch-Mode','Sec-Fetch-Site','Sec-CH-UA','Sec-CH-UA-Mobile','Sec-CH-UA-Platform','DNT','X-Client-Data'].map(header=>({header,operation:'remove'})),{header:'User-Agent',operation:'set',value:'com.google.ios.youtube/20.11.6 (iPhone10,4; U; CPU iOS 16_7_7 like Mac OS X)'}]},condition:{initiatorDomains:[chrome.runtime.id],regexFilter:'^https://(www\\.youtube\\.com|youtubei\\.googleapis\\.com)/youtubei/v1/player',resourceTypes:['xmlhttprequest']}},{id:3,priority:1,action:{type:'modifyHeaders',requestHeaders:[...['Origin','Sec-Fetch-Dest','Sec-Fetch-Mode','Sec-Fetch-Site','Sec-CH-UA','Sec-CH-UA-Mobile','Sec-CH-UA-Platform','DNT'].map(header=>({header,operation:'remove'})),{header:'Referer',operation:'set',value:'https://www.bilibili.com/'},{header:'User-Agent',operation:'set',value:'node'}]},condition:{initiatorDomains:[chrome.runtime.id],requestDomains:['api.bilibili.com'],resourceTypes:['xmlhttprequest']}}]});
+  const removed=['Origin','Sec-Fetch-Dest','Sec-Fetch-Mode','Sec-Fetch-Site','Sec-CH-UA','Sec-CH-UA-Mobile','Sec-CH-UA-Platform','DNT','X-Client-Data'].map(header=>({header,operation:'remove'}));
+  const set=(header,value)=>({header,operation:'set',value});
+  const ios='com.google.ios.youtube/20.11.6 (iPhone10,4; U; CPU iOS 16_7_7 like Mac OS X)';
+  const android='com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12; en_US; Quest 3 Build/SQ3A.220605.009.A1) gzip';
+  const rule=(id,domains,headers,regexFilter,priority=1)=>({id,priority,action:{type:'modifyHeaders',requestHeaders:headers},condition:{initiatorDomains:[chrome.runtime.id],requestDomains:domains,resourceTypes:['xmlhttprequest'],...(regexFilter?{regexFilter}:{})}});
+  await chrome.declarativeNetRequest.updateDynamicRules({removeRuleIds:[1,2,3,4,5,6],addRules:[
+    rule(1,['bilivideo.com','bilivideo.cn','hdslb.com','akamaized.net'],[...removed,set('Referer','https://www.bilibili.com/')]),
+    rule(2,['www.youtube.com','youtubei.googleapis.com'],[...removed,set('User-Agent',ios)],'/youtubei/v1/player'),
+    rule(3,['api.bilibili.com'],[...removed,set('Referer','https://www.bilibili.com/'),set('User-Agent','node')]),
+    rule(4,['googlevideo.com'],[...removed,set('Referer','https://www.youtube.com/'),set('User-Agent',ios)]),
+    rule(5,['googlevideo.com'],[set('User-Agent',android)],'[?&]c=ANDROID_VR(?:&|$)',2),
+    rule(6,['youtubei.googleapis.com'],[set('User-Agent',android)],'/youtubei/v1/player.*[?&]md_client=ANDROID_VR',2)
+  ]});
   const contexts=await chrome.runtime.getContexts({contextTypes:['OFFSCREEN_DOCUMENT']}),{jobs=[]}=await chrome.storage.local.get('jobs');
   if(contexts.length){for(const j of jobs)if(['queued','downloading','processing','verifying','saving'].includes(j.status))running.add(j.id);return;}
   for(const j of jobs)if(['queued','downloading','processing','verifying','saving'].includes(j.status)){j.status='failed';j.error='瀏覽器或擴充已重新啟動，請重新下載。';}await chrome.storage.local.set({jobs});

@@ -8,11 +8,23 @@ const cleanPromise=rootPromise.then(async root=>{for await(const name of root.ke
 function patch(plan,status,progress=0,extra={}){postMessage({type:'job',job:{id:plan.id,status,progress,...extra}});}
 function progress(plan,status){let last=0;return value=>{if(Date.now()-last>800){last=Date.now();patch(plan,status,Math.max(0,Math.min(99,value)));}};}
 function durationTolerance(duration){return Math.max(0.15,Math.min(2,duration*0.005));}
-function checkedFetch(controller){return async(input,init={})=>{
+function checkedFetch(controller,plan){const preferred=new Map();return async(input,init={})=>{
   const url=typeof input==='string'?input:input.url||String(input);
   if(!publicUrl(url))throw new Error('媒體包含不支援的網址。');
-  const response=await fetch(input,{...init,credentials:'omit',signal:AbortSignal.any([controller.signal,init.signal||AbortSignal.timeout(90000)])});
-  if(!response.ok)throw new Error(`來源回應 ${response.status}，請重新掃描。`);
+  const format=plan.formats.find(f=>f.url===url),backups=format?.backups||[];
+  let response,reason;
+  for(const source of [...new Set([preferred.get(url),url,...backups].filter(Boolean))].slice(0,4)){
+    if(!publicUrl(source))continue;
+    try{
+      const request=source===url?input:input instanceof Request?new Request(source,input):source;
+      const timeout=new AbortController(),timer=setTimeout(()=>timeout.abort(new Error('來源連線逾時。')),45000);
+      let r;try{r=await fetch(request,{...init,credentials:'omit',signal:AbortSignal.any([controller.signal,...(init.signal?[init.signal]:[]),timeout.signal])});}finally{clearTimeout(timer);}
+      if(r.ok){response=r;if(format)preferred.set(url,source);break;}
+      reason=`來源回應 ${r.status}`;await r.body?.cancel().catch(()=>{});
+      if(![403,404,412,429,500,502,503,504].includes(r.status))break;
+    }catch(error){controller.signal.throwIfAborted();reason=error.message;}
+  }
+  if(!response)throw new Error(`${reason||'來源連線失敗'}，請重新掃描。`);
   const type=response.headers.get('content-type')||'';
   if(/text\/html|application\/json/.test(type))throw new Error('來源回傳網頁或錯誤訊息，並非影片。');
   if(/\.m3u8(?:[?#]|$)/i.test(url)||/mpegurl/.test(type)){
@@ -29,8 +41,8 @@ async function downloadSegments(f,plan,index,fetcher,task){
   let at=0;const update=progress(plan,'downloading');
   try{for(let i=0;i<f.segments.length;i++){
     const response=await fetcher(f.segments[i]);const reader=response.body.getReader();
-    try{for(;;){const {value,done}=await reader.read();if(done)break;at+=access.write(value,{at});task.controller.signal.throwIfAborted();}}
-    finally{reader.releaseLock();}update(i/f.segments.length*100);
+    try{for(;;){let timer;const {value,done}=await Promise.race([reader.read(),new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('影音讀取逾時。')),45000);})]).finally(()=>clearTimeout(timer));if(done)break;at+=access.write(value,{at});task.controller.signal.throwIfAborted();}}
+    finally{await reader.cancel().catch(()=>{});reader.releaseLock();}update(i/f.segments.length*100);
   }access.flush();}finally{access.close();}
   return new BlobSource(await handle.getFile());
 }
@@ -67,7 +79,7 @@ export async function verifyFile(file,plan,signal=new AbortController().signal,o
 }
 async function run(plan){
   const task={controller:new AbortController(),names:[],inputs:[]};tasks.set(plan.id,task);
-  const signal=task.controller.signal,fetcher=checkedFetch(task.controller),update=progress(plan,'downloading');
+  const signal=task.controller.signal,fetcher=checkedFetch(task.controller,plan),update=progress(plan,'downloading');
   let access,output;
   try{
     await cleanPromise;signal.throwIfAborted();

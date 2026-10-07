@@ -1,6 +1,7 @@
 ﻿$ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path $PSScriptRoot -Parent
-$taskStage = Join-Path $taskRoot 'dist\MediaDock-0.4.0'
+$taskManifest = Get-Content -LiteralPath (Join-Path $taskRoot 'extension\manifest.json') -Raw | ConvertFrom-Json
+$taskStage = Join-Path $taskRoot ('dist\MediaDock-' + $taskManifest.version)
 $taskResolvedStage = [IO.Path]::GetFullPath($taskStage)
 $taskDistRoot = [IO.Path]::GetFullPath((Join-Path $taskRoot 'dist')) + [IO.Path]::DirectorySeparatorChar
 if (-not $taskResolvedStage.StartsWith($taskDistRoot, [StringComparison]::OrdinalIgnoreCase)) { throw '發布路徑超出 dist。' }

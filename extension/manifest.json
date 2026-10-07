@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MediaDock 媒體下載",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "多平台影片與媒體來源偵測，選畫質與儲存位置，下載後核對來源及完整影音驗證。",
   "minimum_chrome_version": "127",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuaegTkRhJfbBRJfx5Mcigv2eHkwIJGP/CAu8/ra7T5ZqQHvysczhufs7DbYUo9tldz4RuwDVOx7QIPzi2ERNF4p3mGH+GfYLOaZGy/qXZuoToMzRSkeh8Tts2fNSrEqYL+JWJHEnaDdL9QJz+6YfC8HTut7fZoUQr5XpzXIVifbuZ2Y9HYl4HIe1VGiBqq7WvxSdecZwfdI5ihRdfd40x7NQLVHQLBEbRQrBnkUJtOL1o9k5oREPF4KjaqG+D5sidMgBnptZMlRIcKjymiD9ZiyDdVEbidazvQE3gU3akIhVcDilWU1vcqITxbjHAscemao0I2EXzkRLiO2sqQ7CmwIDAQAB",

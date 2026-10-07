@@ -110,7 +110,7 @@ $('cookies').addEventListener('change', async () => {
   await analyze(++sequence); $('refresh').disabled = false;
 });
 $('start').addEventListener('click', () => run($('start'), async () => {
-  notice('正在下載與驗證。完成後會詢問儲存位置。'); const result = await send('start', options());
+  notice('正在核對可下載來源，接著下載與驗證。完成後詢問儲存位置。'); const result = await send('start', options());
   notice(result.cancelled ? '已取消儲存。' : '已開始下載。'); if (!result.cancelled) $('history').open = true;
 }));
 $('watch').addEventListener('click', () => run($('watch'), async () => {
