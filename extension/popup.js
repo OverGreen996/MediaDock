@@ -1,4 +1,4 @@
-import {siteName} from './media.js';
+import {youtubeId} from './platforms.js';
 const $ = id => document.getElementById(id);
 let page, info, sequence = 0;
 const states = {queued: '準備下載', downloading: '下載／合併中', processing: '整理影片', verifying: '完整影音驗證中', saving: '選擇儲存位置', completed: '已儲存', failed: '下載失敗', cancelled: '已取消'};
@@ -12,18 +12,16 @@ async function send(action, data = {}) {
   return response.data;
 }
 async function run(el, fn) { el.disabled = true; try { await fn(); } catch (error) { notice(error.message, true); } finally { el.disabled = false; } }
-function options(url = page.url, title = info?.title || page.title) {
-  return {url, title, quality: $('quality').value, mode: $('mode').value, container: $('container').value, expected: url === page.url ? info?.identity : undefined, subtitles: $('subtitles').checked, useCookies: $('cookies').checked, referer: url === page.url ? undefined : page.url};
-}
+function options(){return {url:page.url,quality:$('quality').value,expected:info?.identity};}
 function makeButton(text, action, style = 'primary') {
   const el = document.createElement('button'); el.className = style; el.textContent = text; el.addEventListener('click', () => run(el, action)); return el;
 }
 function empty(text) { const el = document.createElement('div'); el.className = 'empty'; el.textContent = text; return el; }
 async function analyze(token) {
-  $('video').hidden = false; $('media').hidden = true; $('start').disabled = true; $('quality').disabled = true;
+  $('video').hidden = false; $('start').disabled = true; $('quality').disabled = true;
   $('quality').replaceChildren(new Option('正在取得可用畫質…', 'best')); scanState('解析畫質', true);
   try {
-    const result = await send('probe', {url: page.url, useCookies: $('cookies').checked});
+    const result = await send('probe', {url: page.url});
     if (token !== sequence) return;
     info = result; $('page-title').textContent = info.title;
     $('page-description').textContent = [info.uploader, info.duration ? `${Math.floor(info.duration / 60)} 分 ${Math.floor(info.duration % 60)} 秒` : '', '選擇畫質，再決定存到哪裡。'].filter(Boolean).join(' · ');
@@ -36,37 +34,19 @@ async function analyze(token) {
     }
     const defaultQuality = qualities.find(q => (q.width > 0 ? Math.min(q.width, q.height) : q.height) <= 1080);
     if (defaultQuality) $('quality').value = String(defaultQuality.height);
-    $('quality').disabled = $('mode').value === 'audio'; $('start').disabled = !!info.live;
-    scanState(info.live ? '直播暫不支援' : '可下載');
+    $('quality').disabled = false; $('start').disabled = !!info.live;
+    scanState(info.live ? '直播暫不支援' : '已讀取畫質');
   } catch (error) {
     if (token !== sequence) return;
     scanState('解析未完成'); $('quality').replaceChildren(new Option('最佳可用畫質', 'best'));
     $('quality').disabled = true; $('start').disabled = true;
-    notice(error.message + ' 請按重新掃描。', true);
+    notice(error.message + ' 請重新讀取影片。', true);
   }
-}
-function renderMedia() {
-  $('media-list').replaceChildren();
-  if (!page.media.length) { $('media-list').append(empty('尚未找到媒體。先播放影片，再重新掃描。')); return; }
-  page.media.forEach((media, index) => {
-    const item = document.createElement('article'); item.className = 'item';
-    const title = document.createElement('p'); title.className = 'item-title';
-    let basename = ''; try { basename = decodeURIComponent(new URL(media.url).pathname.split('/').pop()); } catch { /* keep a safe fallback */ }
-    title.textContent = `${media.kind} · ${basename || String(index + 1).padStart(2, '0')}`;
-    const url = document.createElement('p'); url.className = 'item-url'; url.textContent = media.url; url.title = media.url;
-    const download = async () => {
-      if (!await chrome.permissions.request({origins:[new URL(media.url).origin+'/*']})) {notice('未授權這個媒體來源。');return;}
-      const result = await send('start', {...options(media.url, page.title), mime:media.mime, quality: 'best', mode: media.kind === '音訊' ? 'audio' : 'video', container: 'mp4', useCookies: false});
-      notice(result.cancelled ? '已取消儲存。' : '已開始下載。關閉此面板仍會繼續。');
-    };
-    item.append(title, url, makeButton('下載並選擇儲存位置', download));
-    $('media-list').append(item);
-  });
 }
 function renderJobs(jobs) {
   const active = jobs.filter(j => ['queued', 'downloading', 'processing', 'verifying', 'saving'].includes(j.status));
   $('count').textContent = active.length ? `${active.length} 項進行中` : jobs.length ? `${jobs.length} 項` : '';
-  $('footer-status').textContent = active.length ? '關閉面板仍會繼續下載' : '按需掃描 · 瀏覽器內處理';
+  $('footer-status').textContent = active.length ? '關閉面板仍會繼續下載' : '僅限 YouTube · 瀏覽器內處理';
   $('jobs').replaceChildren();
   if (!jobs.length) { $('jobs').append(empty('還沒有下載紀錄。')); return; }
   jobs.slice(0, 20).forEach(job => {
@@ -86,40 +66,20 @@ function renderJobs(jobs) {
   });
 }
 async function scan(refresh = false) {
-  const token = ++sequence; info = null; notice(''); scanState('正在掃描', true); $('refresh').disabled = true;
+  const token = ++sequence; info = null; notice(''); scanState('正在讀取', true); $('refresh').disabled = true;
   try {
     page = await send('scan', {refresh: refresh === true}); if (token !== sequence) return;
-    $('page-title').textContent = page.title || '目前頁面'; $('site').textContent = siteName(page.url);
-    const isPlatform = ['YouTube', 'Bilibili'].includes(siteName(page.url));
-    const h = new URL(page.url).hostname; const bili = h.endsWith('.bilibili.com') || h === 'bilibili.com';
-    $('cookie-option').hidden = !bili; $('cookie-hint').hidden = !bili;
-    $('watch').textContent = page.watching ? '停止串流偵測' : '啟用串流偵測'; $('watch-hint').hidden = !page.watching;
-    if (isPlatform) await analyze(token);
-    else {
-      $('video').hidden = true; $('media').hidden = false;
-      $('page-description').textContent = page.media.length ? `找到 ${page.media.length} 個媒體來源。選擇要保存的影片。` : '自動掃描影片、音訊與串流來源。';
-      scanState(page.media.length ? `${page.media.length} 個來源` : '掃描完成'); renderMedia();
-    }
-  } catch (error) { scanState('無法掃描'); notice(error.message, true); }
+    $('site').textContent = 'YouTube';
+    if (youtubeId(page.url)) await analyze(token);
+    else { $('video').hidden=true;scanState('僅限 YouTube');$('page-title').textContent='開啟 YouTube 影片';$('page-description').textContent='支援一般影片與 Shorts。開啟播放頁後，再點 MediaDock。'; }
+  } catch (error) { scanState('無法讀取'); notice(error.message, true); }
   finally { if (token === sequence) $('refresh').disabled = false; }
 }
 $('refresh').addEventListener('click', () => scan(true));
 $('setup').addEventListener('click', () => chrome.runtime.openOptionsPage());
-$('mode').addEventListener('change', () => { const audio = $('mode').value === 'audio'; $('quality').disabled = audio; $('container').disabled = audio; });
-$('cookies').addEventListener('change', async () => {
-  await analyze(++sequence); $('refresh').disabled = false;
-});
 $('start').addEventListener('click', () => run($('start'), async () => {
   notice('正在核對可下載來源，接著下載與驗證。完成後詢問儲存位置。'); const result = await send('start', options());
   notice(result.cancelled ? '已取消儲存。' : '已開始下載。'); if (!result.cancelled) $('history').open = true;
-}));
-$('watch').addEventListener('click', () => run($('watch'), async () => {
-  if (page?.watching) await send('stopWatch', {tabId: page.tabId});
-  else {
-    if (!await chrome.permissions.request({origins: ['http://*/*', 'https://*/*']})) { notice('未啟用串流偵測，仍可使用自動頁面掃描。'); return; }
-    await send('watch');
-  }
-  await scan();
 }));
 $('clear').addEventListener('click', () => run($('clear'), () => send('clearHistory')));
 chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local' && changes.jobs) renderJobs(changes.jobs.newValue || []); });

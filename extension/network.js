@@ -51,10 +51,11 @@ export async function checkFormats(formats,platform,fetcher=fetch){
 }
 export async function prepareFormats(info,options,fetcher=fetch){
   const select=data=>selectFormats(data,options.quality,options.mode==='audio',options.container);
+  if(info.sabr)return select(info);
   let reason;
   try{return await checkFormats(select(info),info.platform,fetcher);}catch(error){reason=error.message;}
   const primaryReason=reason;
-  if(info.platform!=='YouTube')throw new Error(`${info.platform} ${reason}。請在網站播放後重新掃描。`);
+  if(info.platform!=='YouTube')throw new Error(`${info.platform} ${reason}。請在網站播放後重新讀取。`);
   let alternate;
   try{alternate=await youtubeProbe(info.identity.sourceUrl,fetcher,info.client==='ANDROID_VR'?'iOS':'ANDROID_VR');return await checkFormats(select(alternate),'YouTube',fetcher);}catch(error){reason=error.message||reason;}
   for(const data of [info,alternate].filter(d=>d?.hls))try{
@@ -63,5 +64,5 @@ export async function prepareFormats(info,options,fetcher=fetch){
     const group=selected[0].audioGroup;if(group){const audio=formats.find(f=>f.id===group);if(!audio)throw new Error('串流缺少相符音訊。');selected=[selected[0],audio];}
     return await checkFormats(selected,'YouTube',fetcher);
   }catch(error){reason=error.message;}
-  throw new Error(`YouTube 目前沒有能下載的相同畫質來源（${[...new Set([primaryReason,reason])].join('；備援：')}）。重新掃描不一定能解除來源限制；不會改下載其他影片或降低畫質。`);
+  throw new Error(`YouTube 目前沒有能下載的相同畫質來源（${[...new Set([primaryReason,reason])].join('；備援：')}）。重新讀取不一定能解除來源限制；不會改下載其他影片或降低畫質。`);
 }

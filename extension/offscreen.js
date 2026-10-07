@@ -1,4 +1,3 @@
-import {resolveDash} from './manifests.js';
 let worker;
 const active=new Set(),urls=new Map(),released=new Set();
 async function send(m){const r=await chrome.runtime.sendMessage(m);if(!r?.ok)throw new Error(r?.error||'下載工作已中斷。');return r.data;}
@@ -21,7 +20,7 @@ chrome.runtime.onMessage.addListener((m,s,respond)=>{
   if(m.target!=='engine'||s.id!==chrome.runtime.id||s.tab||s.url!==chrome.runtime.getURL('background.js'))return false;
   if(m.action==='start'){
     active.add(m.plan.id);respond({ok:true});
-    (async()=>{try{const plan=m.plan.formats[0].kind==='DASH'?await resolveDash(m.plan):m.plan;if(released.has(plan.id))return;getWorker().postMessage({action:'start',plan});}catch(e){await send({action:'job',job:{id:m.plan.id,status:'failed',error:e.message}}).catch(()=>{});await release(m.plan.id);}})();
+    (async()=>{try{const plan=m.plan;if(released.has(plan.id))return;getWorker().postMessage({action:'start',plan});}catch(e){await send({action:'job',job:{id:m.plan.id,status:'failed',error:e.message}}).catch(()=>{});await release(m.plan.id);}})();
   }
   else if(m.action==='cancel'){released.add(m.id);worker?.postMessage({action:'cancel',id:m.id});send({action:'job',job:{id:m.id,status:'cancelled',error:''}}).catch(()=>{});if(!worker)active.delete(m.id);respond({ok:true});}
   else if(m.action==='release'){release(m.id);respond({ok:true});}

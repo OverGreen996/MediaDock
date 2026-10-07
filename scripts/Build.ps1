@@ -16,9 +16,10 @@ $taskReadmeText = [IO.File]::ReadAllText($taskPackagedReadme).Replace('src="exte
 Copy-Item -LiteralPath (Join-Path $taskRoot 'licenses') -Destination $taskStage -Recurse -Force
 Copy-Item -LiteralPath (Join-Path $taskRoot 'docs') -Destination $taskStage -Recurse -Force
 if (Get-ChildItem -LiteralPath $taskStage -Recurse -File | Where-Object { $_.Extension -in @('.exe','.cmd','.ps1','.bat') }) { throw '純擴充發布包不能包含安裝器或執行檔。' }
-$taskZip = Join-Path $taskRoot 'dist\MediaDock-Extension.zip'
+$taskZipName = if ($taskManifest.version_name -like '*測試*') { 'MediaDock-YouTube-Test.zip' } else { 'MediaDock-Extension.zip' }
+$taskZip = Join-Path $taskRoot ('dist\' + $taskZipName)
 Compress-Archive -Path $taskStage -DestinationPath $taskZip -Force
 $taskHash = (Get-FileHash -LiteralPath $taskZip -Algorithm SHA256).Hash.ToLowerInvariant()
-[IO.File]::WriteAllText((Join-Path $taskRoot 'dist\SHA256SUMS.txt'), "$taskHash  MediaDock-Extension.zip`n", (New-Object Text.UTF8Encoding $false))
+[IO.File]::WriteAllText((Join-Path $taskRoot 'dist\SHA256SUMS.txt'), "$taskHash  ${taskZipName}`n", (New-Object Text.UTF8Encoding $false))
 Write-Host "純擴充發布包：$taskZip"
 Write-Host "SHA256：$taskHash"

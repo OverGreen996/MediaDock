@@ -5,7 +5,7 @@ import http from 'node:http';
 import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
 const out=path.resolve('test-output/pure'),cases=[];
-for(const name of process.argv.slice(2).length?process.argv.slice(2):['youtube-1440','youtube-2160','shorts-2964','bili-best']){
+for(const name of process.argv.slice(2).length?process.argv.slice(2):['youtube-2160','shorts-2964']){
  const job=JSON.parse(fs.readFileSync(path.join(out,name+'-report.json'),'utf8'))[0];
  const saved=JSON.parse(fs.readFileSync(path.join(out,name+'-files.json'),'utf8'))[0];
  assert.ok(saved.filename.startsWith(out+path.sep));
@@ -13,7 +13,7 @@ for(const name of process.argv.slice(2).length?process.argv.slice(2):['youtube-1
  cases.push({name,job,saved});
 }
 const server=http.createServer((req,res)=>{
- if(req.url==='/'){res.writeHead(200,{'Content-Type':'text/html'}).end('<html><head><style>body{font-family:Segoe UI;background:#111827;color:#f9fafb;margin:24px}h1{font-size:24px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}article{background:#1f2937;padding:16px;border-radius:12px}canvas{width:100%;height:200px;object-fit:contain;background:#000}p{margin:8px 0;font-size:13px}</style></head><body><h1>MediaDock 0.4 · Saved-file playback verification</h1><div class="grid"></div></body></html>');return;}
+ if(req.url==='/'){res.writeHead(200,{'Content-Type':'text/html'}).end('<html><head><style>body{font-family:Segoe UI;background:#111827;color:#f9fafb;margin:24px}h1{font-size:24px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}article{background:#1f2937;padding:16px;border-radius:12px}canvas{width:100%;height:200px;object-fit:contain;background:#000}p{margin:8px 0;font-size:13px}</style></head><body><h1>MediaDock 0.5 · Saved-file playback verification</h1><div class="grid"></div></body></html>');return;}
  const c=cases[Number(req.url.slice(1))];if(!c){res.writeHead(404).end();return;}
  const size=fs.statSync(c.saved.filename).size,range=req.headers.range?.match(/bytes=(\d+)-(\d*)/),start=range?Number(range[1]):0,end=range?Math.min(Number(range[2]||size-1),size-1):size-1;
  res.writeHead(range?206:200,{'Content-Type':'video/mp4','Content-Length':end-start+1,'Accept-Ranges':'bytes',...(range?{'Content-Range':`bytes ${start}-${end}/${size}`}:{})});fs.createReadStream(c.saved.filename,{start,end}).pipe(res);

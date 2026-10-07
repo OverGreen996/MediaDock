@@ -1,6 +1,6 @@
 {
   "name": "media-dock",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,10 +8,17 @@
     "test": "node --test tests/pure-core.test.mjs",
     "test:ui": "node tests/ui-smoke.mjs",
     "test:youtube-button": "node tests/youtube-button-smoke.mjs",
-    "test:fixtures": "node tests/browser-fixtures.mjs",
     "test:live": "node tests/browser-live.mjs",
-    "test:playback": "node tests/pure-playback.mjs"
+    "test:playback": "node tests/pure-playback.mjs",
+    "test:fixtures": "node tests/browser-fixtures.mjs"
   },
-  "dependencies": {"@noble/hashes": "2.4.0", "mediabunny": "1.61.3"},
-  "devDependencies": {"esbuild": "0.28.2", "playwright": "1.63.0"}
+  "dependencies": {
+    "@noble/hashes": "2.4.0",
+    "googlevideo": "4.1.1",
+    "mediabunny": "1.61.3"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "playwright": "1.63.0"
+  }
 }
