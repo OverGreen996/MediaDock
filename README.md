@@ -4,20 +4,69 @@
 
 # MediaDock
 
-**點開目前影片，選畫質，存到你要的位置。**
+**選畫質，下載，存到你要的位置。**
 
-繁體中文媒體下載擴充功能 · Windows 10／11 x64 · Edge／Chrome 127+
+Edge／Chrome 127+ · 繁體中文 · 0.4.0 純擴充版
 
-**[下載 Windows 安裝包](https://github.com/OverGreen996/MediaDock/releases/download/v0.3.0/MediaDock-Windows.zip)** · [版本與校驗值](https://github.com/OverGreen996/MediaDock/releases/tag/v0.3.0) · [驗證紀錄](VALIDATION.md)
-
-擴充功能 **0.3.0** ／ 本機助手 **0.2.1**
+**[下載擴充功能 ZIP](https://github.com/OverGreen996/MediaDock/releases/download/v0.4.0/MediaDock-Extension.zip)** · [版本與校驗值](https://github.com/OverGreen996/MediaDock/releases/tag/v0.4.0) · [驗證紀錄](VALIDATION.md)
 
 </div>
 
-- **YouTube、Bilibili**：自動解析目前影片 → 選畫質 →「下載並選擇儲存位置」→ Windows 另存新檔。
-- **YouTube 頁面按鈕**：一般播放頁在「分享」旁顯示「下載」；Shorts 放在分享操作列。點一下開啟同一個下載面板。配色跟隨 YouTube，切換影片會更新，不會重複加入按鈕。
-- **其他網站**：自動掃描頁面 → 列出影片／音訊／HLS／DASH → 選一個來源 → 選儲存位置。
-- 接近瀏覽器原生樣式的精簡面板、淺色／深色模式。MP3、格式、字幕及 Bilibili 登入狀態收在「更多選項」。
+解壓、載入擴充功能，就能開始。所有媒體處理在瀏覽器內完成；使用者無須安裝 Node.js、Python、FFmpeg、yt-dlp 或本機助手。
+
+- **YouTube／Bilibili**：讀取目前影片，列出實際可用畫質，支援 Shorts 與 Bili 當前分 P。
+- **YouTube 頁面按鈕**：一般播放頁的「分享」旁加入「下載」；Shorts 放在分享操作列。點擊開啟同一個面板，配色跟隨網站，切換影片會更新。
+- **其他網站**：按需掃描並列出找到的影片、音訊、HLS／DASH，選擇要保存的來源。
+- 精簡的淺色／深色面板；格式、僅音訊與 Bili 登入選項收在「更多選項」。
+
+## 安裝
+
+1. [下載 MediaDock-Extension.zip](https://github.com/OverGreen996/MediaDock/releases/download/v0.4.0/MediaDock-Extension.zip)，解壓縮。
+2. 開啟 `edge://extensions` 或 `chrome://extensions`，啟用「開發人員模式」，點「載入解壓縮」。
+3. 選擇解壓後的 **`MediaDock-0.4.0` 資料夾**，其中應直接包含 `manifest.json`。確認顯示 **0.4.0**，固定圖示到工具列。
+
+這是手動載入版，尚未上架瀏覽器擴充商店。瀏覽器不允許 ZIP 自動安裝，仍需上述載入步驟。ZIP 的 SHA-256 見 [SHA256SUMS.txt](https://github.com/OverGreen996/MediaDock/releases/download/v0.4.0/SHA256SUMS.txt)。
+
+GitHub 原始碼下載包則選擇裡面的 `extension/` 資料夾。YouTube 已開啟的頁面請重新整理，頁面下載按鈕才會出現。
+
+從 0.3 升級：移除舊版擴充，再載入 0.4；移除擴充會清除舊下載紀錄，已儲存的影片仍保留。0.4 不使用舊本機助手。0.3 的程式與安裝說明保留在 [舊版 Release](https://github.com/OverGreen996/MediaDock/releases/tag/v0.3.0)。固定擴充 ID：`fhjcedbbonnlkilcklhodjejolannode`。
+
+## 使用
+
+開啟影片頁，點 MediaDock，選畫質後按「下載並選擇儲存位置」。**先下載、合併與完整驗證，完成後才跳出瀏覽器的另存新檔視窗。** 沒有通過驗證的來源不會提供儲存。
+
+關閉面板仍會繼續下載；重新點圖示可查看進度、取消與下載紀錄。請保持瀏覽器開啟，重新載入、停用或移除擴充會中斷工作。最多同時兩項下載。4K、長影片的完整解碼會多花時間，並需要足夠的瀏覽器暫存空間。
+
+畫質依來源實際提供，不會把低畫質升頻當成 4K。預設選擇不超過 1080p 的可用畫質，也可選「最佳可用畫質」。Shorts 顯示短邊畫質與實際寬高，例如「2160p／4K · 2160 × 2964」，保存原始尺寸。
+
+Bilibili 的「使用此分頁的 Bilibili 登入權限」預設勾選，使用同一瀏覽器既有的網站登入狀態；**不讀取、匯出或保存 Cookie 值**。畫質取決於影片與帳號權限，登入不代表一定能取得全部畫質。請開啟要下載的分 P，不批次下載播放清單。此版尚未實測使用者登入後的 1080p／會員畫質。
+
+保留來源的影音編碼，合併成相容的 MP4 或 WebM，沒有重新編碼或降低畫質。「僅音訊」保存原始音訊為 M4A 或 WebM；本版沒有 MP3 轉檔與字幕下載。高畫質的 VP9／AV1 等原始編碼，需要播放器支援；瀏覽器無法完整解碼的來源會報錯，不會假稱通過驗證。
+
+## 掃描其他網站
+
+先播放影片，再點圖示或「重新掃描」。清單可列出頁面媒體、連結與同源 iframe 中的來源。若未找到，可選「啟用串流偵測」並授權，重新播放／載入，再重新掃描。偵測只記錄啟用的分頁；停止偵測清除該分頁清單。下載其他網域的媒體時，另按來源要求網站存取權。
+
+支援一般 MP4／WebM／音訊、**未加密的 HLS 隨選串流**與**部分靜態 DASH**。DASH 支援單一 Period 的 BaseURL、SegmentTemplate／SegmentTimeline、SegmentList（無 byte range）等形式。未支援的格式會明確報錯。網域辨識只提供網站標籤，不代表每個網站都能下載；其他網站沒有宣稱全面支援的專用解析器。
+
+DRM、加密串流、直播、blob 網址本身、需額外驗證、反爬或未授權內容可能無法保存。一般媒體來源以匿名請求下載，無法沿用其他網站的私人登入權限；Bili 專用解析是上述登入流程的例外。清單可能包含廣告或預告，請選擇正確來源。請下載你有權保存的媒體。
+
+## 驗證與實測
+
+YouTube 下載前重新核對影片 ID；Bilibili 核對 BV／AV、CID、分 P 與目前網址，再選擇精確畫質。下載後檢查影音軌道、來源片長、實際尺寸、分段完整性，完整解碼影音至片尾，並計算 SHA-256。只在瀏覽器確認檔案儲存完成後，紀錄才顯示「驗證完成」。
+
+這些檢查確認所選來源與媒體完整性，不能自動辨識每個一般網頁資源是否為主片，也不能保證所有第三方播放器。SHA-256 用於確認已驗證及儲存的位元組一致，並不是網站提供的內容認證。
+
+2026-10-07，以真正的 Edge MV3 擴充完成以下下載；實際 API、CDN 媒體、瀏覽器內合併／完整解碼及已儲存檔案播放均通過：
+
+| 來源 | 實際檔案 | 結果 |
+|---|---|---|
+| YouTube 1440p | 2560 × 1440 · MP4／VP9／AAC | 原始編碼，來源核對、全片影音解碼、Edge 播放通過 |
+| YouTube 4K | 3840 × 2160 · MP4／VP9／AAC | 原始編碼，上述驗證通過 |
+| YouTube Shorts | 2160 × 2964 · MP4／VP9／AAC | 保留直向尺寸，上述驗證通過 |
+| Bilibili 公開影片 | 480p · MP4／H.264／AAC | 測試瀏覽器未登入，公開可用畫質驗證通過 |
+
+另通過 **16 項核心測試**與真實瀏覽器 MP4／HLS／DASH 案例；偽裝 MP4 的 HTML、截斷檔案會失敗且不儲存；取消、暫存清理與閒置引擎釋放均通過。Chrome 正式版及 Bili 已登入 1080p 尚未實測。完整方法與限制見 [VALIDATION.md](VALIDATION.md)。
 
 ## 介面預覽
 
@@ -26,84 +75,30 @@
   <img src="docs/images/popup-light.png" width="368" alt="MediaDock 畫質選擇面板">
 </picture>
 
-YouTube 的操作列：
+![YouTube 分享旁的 MediaDock 下載按鈕](docs/images/youtube-button.png)
 
-![分享旁的 MediaDock 下載按鈕](docs/images/youtube-button.png)
+面板使用固定測試資料；按鈕由真實 Edge 擴充功能注入測試頁。截圖不是所有影片都可提供該畫質的保證。
 
-面板截圖使用固定測試資料；按鈕由真實 Edge 擴充功能注入測試頁。實際影片畫質以當下解析結果為準。
+## 資源與隱私
 
-## 安裝（Windows 10／11 x64）
+沒有下載伺服器、遙測、第三方字型或遠端執行程式。平台解析短暫快取 90 秒，最多 12 筆；下載紀錄僅在瀏覽器本機保存，最多 100 筆。紀錄包含來源網址、識別、驗證摘要與檔案指紋。
 
-1. [下載 MediaDock-Windows.zip](https://github.com/OverGreen996/MediaDock/releases/download/v0.3.0/MediaDock-Windows.zip)，解壓縮後開啟 `MediaDock` 資料夾，雙擊 `Install.cmd`。第一次會下載 yt-dlp、FFmpeg、Deno，從官方 GitHub Release 取得並驗證 SHA-256。無須管理員、Python 或 Node.js。
-2. 在 `edge://extensions` 或 `chrome://extensions` 開啟「開發人員模式」，選「載入解壓縮」。選擇 `%LOCALAPPDATA%\MediaDock\extension`。
-3. 固定 MediaDock 到工具列，開啟影片頁後點圖示。重新整理 YouTube 頁面，便會出現「下載」按鈕。
+一般網站按需掃描，不載入常駐內容腳本；YouTube 的頁面按鈕使用輕量事件／DOM 觀察，沒有定時輪詢。只在開始下載時建立背景媒體工作頁與 Worker，串流寫入瀏覽器私有暫存空間；工作結束清除暫存，閒置約 10 秒釋放媒體引擎。非正常中斷留下的暫存會在下次下載時清理。清除紀錄不刪除影片，移除擴充可直接從瀏覽器操作。
 
-安裝包的 SHA-256 見 [Release 校驗檔](https://github.com/OverGreen996/MediaDock/releases/download/v0.3.0/SHA256SUMS.txt)。
-
-升級至 0.3.0：解壓新版包後重新執行 `Install.cmd`，再於擴充功能頁按重新載入，並重新整理已開啟的 YouTube 頁面。新版需要 YouTube 網站存取權，以顯示頁面按鈕與讀取當前影片網址。0.2 需要新版助手提供驗證；0.2.1 助手另補上直式影片的寬高資訊，0.3.0 仍使用此版助手。0.1 助手會被阻擋並提示更新。`Update.cmd` 用於更新下載工具。
-
-本機助手只透過 Native Messaging 和本擴充功能連線，不開 HTTP 服務。安裝在 `%LOCALAPPDATA%\MediaDock`，只登記目前使用者的 Chrome／Edge NativeMessagingHosts。固定擴充功能 ID：`fhjcedbbonnlkilcklhodjejolannode`。
-
-本機下載的儲存視窗可能使擴充功能面板收起；下載仍會開始，重新點圖示可看下載紀錄。Windows 檔案對話框會在覆寫既有檔案前詢問。關閉面板不會中斷；關閉瀏覽器或重載／停用擴充功能會中斷本機下載。最多同時兩個本機下載。
-
-## 掃描其他網站
-
-一般網站只在開啟面板或按「重新掃描」時掃描，沒有常駐內容腳本。YouTube 是頁面按鈕的例外：只在 www.youtube.com 執行輕量腳本，按鈕安裝後僅觀察操作列內部及其祖先的直接子節點，沒有定時輪詢，也不在頁面載入時啟動助手或解析影片。先播放影片通常可取得更多來源。若未找到，按「啟用串流偵測」並授權，重新載入或播放影片，再重新掃描。偵測只記錄啟用的分頁，來源清單最多 60 項；停止偵測會清除清單。只有這個選用功能需要所有網站讀取權限，網站內不同 CDN 的媒體請求需要此權限。
-
-所有新下載均使用本機助手與 Windows 儲存對話框，包含一般 MP4／WebM／音訊及 HLS／DASH。來源需要 Referer 時會傳送所在頁面的網址。支援 Vimeo、Dailymotion、Twitch、TikTok、Instagram、Facebook、X、抖音、優酷、騰訊影片、AcFun、Niconico、SoundCloud 的網域辨識；其他網站仍先列出掃描資源，也可按「解析此頁的平台影片」呼叫 yt-dlp 查詢實際支援及畫質。網域辨識成功不表示該影片一定可下載；解析失敗會停用下載，不猜測成功。
-
-DRM、blob 本身、網站反爬、地區限制、需驗證或帳號未授權的影片可能無法保存；網站格式會變動，請執行 `Update.cmd` 更新工具。
-
-## 正確內容與可播放驗證
-
-解析時記錄來源 URL、影片 ID、解析器及片長；下載時再次比對影片 ID、分集與解析後的頁面 URL。FFprobe 確認影音串流、畫質與來源片長，片長允許 2 秒的 metadata／編碼誤差。MP4 若採不相容的影音編碼，會轉成 H.264 8-bit／AAC；MKV 保留原編碼。接著 FFmpeg 完整解碼全部影像與音訊，檢查錯誤及是否到達片尾，通過後計算 SHA-256 並存入本機下載紀錄。驗證失敗不交付檔案，也不覆寫原先的同名檔案。
-
-下載紀錄會顯示「完整影音驗證中」，通過後才顯示「驗證完成」。舊版下載紀錄沒有驗證資料時顯示「已儲存 · 未驗證」。完整解碼一次只進行一個工作，使用兩個執行緒與較低程序優先權；長影片、4K 或需要相容轉檔時會額外花時間。
-
-這些檢查確認的是所選來源與媒體完整性；無法替使用者判斷每個網頁資源是否為主片、廣告或預告，也不能保證所有播放器。來源不提供片長時，紀錄會保留 `durationMatched: false`，不假稱已核對來源片長。實測範圍與來源見 `VALIDATION.md`。
-
-YouTube 使用公開影片解析。Bilibili 登入狀態是選用功能，只讀取 Bilibili Cookie，暫存於僅目前使用者可讀取的資料夾；工作結束刪除，非正常結束的暫存於下次助手啟動清除。Cookie 不寫入下載紀錄、不送到雲端。Bilibili 分 P 請開啟要下載的那一 P；不批次下載播放清單。直播暫不支援。請下載你有權保存的媒體。
-
-畫質選單根據當下解析結果列出；來源未提供的 2K／4K 不會憑空增加。Shorts 直式影片顯示短邊畫質及實際寬高，例如「1080p · 1080 × 1482」；下載及驗證仍採用該格式的實際尺寸。預設選擇不超過 1080p 的可用畫質，也可手動選最高畫質。若要保留來源原始影音編碼，於「更多選項」選 MKV；MP4 必要時會重新編碼以增加播放相容性，並非永遠無損。
-
-2026-10-07 實測指定的 Bilibili 公開影片，不帶登入 Cookie 也能下載完整 1080p；不能推論每支影片都相同。登入網站後若仍缺少畫質，可在同一瀏覽器的面板勾選「使用 Bilibili 登入狀態」並授權。登入其他瀏覽器不會自動共用帳號。
-
-## 已實測的下載
-
-| 來源 | 實際檔案 | 結果 |
-|---|---|---|
-| YouTube 1440p | 2560 × 1440 · MKV／VP9／Opus | 來源核對、完整解碼、Edge 播放通過；未重新編碼 |
-| YouTube 4K | 3840 × 2160 · MKV／VP9／Opus | 來源核對、完整解碼、Edge 播放通過；未重新編碼 |
-| YouTube Shorts 最高可用畫質 | 2160 × 2964 · MP4／H.264／AAC | 來源核對、完整解碼、Edge 播放通過；經相容轉檔 |
-| Bilibili 公開影片 | 1920 × 1080 · MP4／H.264／AAC | 未帶登入 Cookie，完整下載及上述驗證通過 |
-
-Edge 播放測試包含開頭、片中跳轉與片尾。另有 **13 項核心測試、21 項影音驗證案例**，以及真實 MV3、Native Messaging、Windows 儲存視窗與 YouTube 按鈕測試。
-
-Chrome 正式版、會員畫質與其他平台的真實下載尚未全面實測。上述是指定來源的結果，不能保證所有網站與播放器。完整來源、方法與限制見 [VALIDATION.md](VALIDATION.md)。
-
-## 資源使用與隱私
-
-無第三方字型、框架、遙測或雲端服務。影片查詢回傳標題、片長、畫質及核對所需的來源識別資訊。公開影片解析結果短暫快取三分鐘；本機助手無工作時 30 秒退出。一般網站掃描不啟動本機助手。下載紀錄與驗證摘要僅本機保存，最多 100 項；清除只移除紀錄，不刪下載檔案。
-
-執行 `Uninstall.cmd` 可移除本機助手與註冊，下載檔案保留。再由瀏覽器移除擴充功能。
+網站 API 與媒體網址可能變動，之後可能需要更新擴充。此版沒有簽名／JavaScript challenge 解碼器；目前支援的 YouTube 客戶端若無法提供直接影音網址，會報錯。
 
 ## 開發
 
-原始碼在 `extension/`、`native/`；不需要前端建置。Windows .NET Framework C# 編譯器用於建立本機助手；Node.js 用於執行開發測試：
+使用者載入預先建置的 `extension/` 即可。以下工具只供開發與測試：Node.js、pnpm、已安裝的 Edge；FFmpeg 只用於生成可重現的測試媒體，不包含於擴充與發行 ZIP。
 
 ```powershell
+pnpm install --frozen-lockfile
+pnpm run build
+pnpm test
+pnpm run test:ui
+pnpm run test:youtube-button
+pnpm run test:fixtures
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Build.ps1
-node --test tests/core.test.mjs
 ```
 
-UI 測試需要 Playwright 與已安裝的 Edge。本次使用 Playwright 1.62.1；也可透過 `CODEX_NODE_MODULES` 指定包含該套件的 node_modules。
-
-```powershell
-npm install --no-save --package-lock=false playwright@1.62.1
-npm run test:ui
-npm run test:youtube-button
-```
-
-`scripts/Install.ps1 -ToolsOnly -TargetRoot <測試資料夾>` 只準備下載工具，不修改登錄。測試流程與實測限制見 [VALIDATION.md](VALIDATION.md)，工具來源與授權見 [THIRD-PARTY.md](THIRD-PARTY.md)。測試影片、瀏覽器資料、Cookie 與暫存檔不包含在儲存庫或發行包。
-
-實作依據：[Chrome Native Messaging](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging)、[開啟擴充面板](https://developer.chrome.com/docs/extensions/reference/api/action#method-openPopup)、[Edge Native Messaging](https://learn.microsoft.com/en-us/microsoft-edge/extensions/developer-guide/native-messaging)、[yt-dlp](https://github.com/yt-dlp/yt-dlp)、[YouTube EJS 執行環境](https://github.com/yt-dlp/yt-dlp/wiki/EJS)。
+原始碼：`extension/`（面板／平台解析）、`src/engine.js`（瀏覽器媒體引擎）；`engine.bundle.js` 已隨原始碼與 ZIP 提供。依賴固定版本，授權與對應原始碼下載見 [THIRD-PARTY.md](THIRD-PARTY.md)。真實平台與播放測試見 [VALIDATION.md](VALIDATION.md)。影片、瀏覽器設定檔、登入資料與測試暫存不包含於儲存庫或發行包。

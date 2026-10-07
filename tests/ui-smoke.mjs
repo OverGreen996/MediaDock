@@ -83,11 +83,8 @@ try {
   assert.equal(await generic.page.evaluate(() => testCalls.some(c => c.action === 'start' && c.url.endsWith('master.m3u8'))), true);
   await generic.context.close();
   const multi = await ui('vimeo'); assert.equal(await multi.page.locator('#site').textContent(), 'Vimeo');
-  assert.equal(await multi.page.evaluate(() => testCalls.some(c => c.action === 'probe')), false);
-  await multi.page.locator('#platform-probe').click(); await multi.page.locator('#start').waitFor();
-  assert.equal(await multi.page.evaluate(() => testCalls.find(c => c.action === 'probe').url), 'https://vimeo.com/1084537');
-  assert.equal(await multi.page.locator('#quality').inputValue(), '1080'); await multi.context.close();
-  for (const kind of ['missing', 'empty']) { const p = await ui(kind); if (kind === 'missing') assert.equal(await p.page.locator('#start').isDisabled(), true); await p.context.close(); }
+  assert.equal(await multi.page.evaluate(() => testCalls.some(c => c.action === 'probe')), false); await multi.context.close();
+  for (const kind of ['missing', 'empty']) { const p = await ui(kind); if (kind === 'missing') assert.equal(await p.page.locator('#start').isDisabled(), false); await p.context.close(); }
   for (const kind of ['youtube', 'generic']) { const p = await ui(kind, 'dark'); await p.context.close(); }
   const fixture = await browser.newPage();
   await fixture.setContent('<video src="https://cdn.example.com/movie.mp4"></video><video></video><audio><source src="https://cdn.example.com/song.m4a" type="audio/mp4"></audio><a href="https://cdn.example.com/master.m3u8">串流</a><a href="https://cdn.example.com/pic.jpg">image</a><video src="blob:https://example.com/abc"></video>');

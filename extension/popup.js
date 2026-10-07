@@ -1,13 +1,12 @@
 import {siteName} from './media.js';
 const $ = id => document.getElementById(id);
 let page, info, sequence = 0;
-const states = {queued: '選擇儲存位置', downloading: '下載中', processing: '解析／合併中', verifying: '完整影音驗證中', completed: '已儲存', failed: '下載失敗', cancelled: '已取消'};
+const states = {queued: '準備下載', downloading: '下載／合併中', processing: '整理影片', verifying: '完整影音驗證中', saving: '選擇儲存位置', completed: '已儲存', failed: '下載失敗', cancelled: '已取消'};
 function notice(text, error = false) { $('message').textContent = text; $('message').dataset.error = String(error); $('message').hidden = !text; }
 function scanState(text, busy = false) { $('scan-state').textContent = text; $('scan-state').classList.toggle('busy', busy); }
 async function send(action, data = {}) {
   const response = await chrome.runtime.sendMessage({action, ...data});
   if (!response?.ok) {
-    if (/未連線|安裝本機|缺少|需要更新/.test(response?.error || '')) $('helper').hidden = false;
     throw new Error(response?.error || '無法連線，請重新開啟擴充功能。');
   }
   return response.data;
@@ -23,14 +22,6 @@ function empty(text) { const el = document.createElement('div'); el.className = 
 async function analyze(token) {
   $('video').hidden = false; $('media').hidden = true; $('start').disabled = true; $('quality').disabled = true;
   $('quality').replaceChildren(new Option('正在取得可用畫質…', 'best')); scanState('解析畫質', true);
-  let ready = false;
-  try { const status = await send('status'); ready = status.ready; if (status.updateNeeded) notice('本機助手需要更新，請重新執行新版 Install.cmd。', true); } catch { /* an uninstalled host is explained inline */ }
-  if (token !== sequence) return;
-  $('helper').hidden = ready;
-  if (!ready) {
-    $('quality').replaceChildren(new Option('安裝助手後取得畫質', 'best'));
-    scanState('需要本機助手'); $('page-description').textContent = '安裝一次本機助手，即可選畫質、合併影音與選擇儲存位置。'; return;
-  }
   try {
     const result = await send('probe', {url: page.url, useCookies: $('cookies').checked});
     if (token !== sequence) return;
@@ -64,7 +55,8 @@ function renderMedia() {
     title.textContent = `${media.kind} · ${basename || String(index + 1).padStart(2, '0')}`;
     const url = document.createElement('p'); url.className = 'item-url'; url.textContent = media.url; url.title = media.url;
     const download = async () => {
-      const result = await send('start', {...options(media.url, page.title), quality: 'best', mode: media.kind === '音訊' ? 'audio' : 'video', container: 'mp4', useCookies: false});
+      if (!await chrome.permissions.request({origins:[new URL(media.url).origin+'/*']})) {notice('未授權這個媒體來源。');return;}
+      const result = await send('start', {...options(media.url, page.title), mime:media.mime, quality: 'best', mode: media.kind === '音訊' ? 'audio' : 'video', container: 'mp4', useCookies: false});
       notice(result.cancelled ? '已取消儲存。' : '已開始下載。關閉此面板仍會繼續。');
     };
     item.append(title, url, makeButton('下載並選擇儲存位置', download));
@@ -72,9 +64,9 @@ function renderMedia() {
   });
 }
 function renderJobs(jobs) {
-  const active = jobs.filter(j => ['queued', 'downloading', 'processing', 'verifying'].includes(j.status));
+  const active = jobs.filter(j => ['queued', 'downloading', 'processing', 'verifying', 'saving'].includes(j.status));
   $('count').textContent = active.length ? `${active.length} 項進行中` : jobs.length ? `${jobs.length} 項` : '';
-  $('footer-status').textContent = active.length ? '關閉面板仍會繼續下載' : '按需掃描 · 本機處理';
+  $('footer-status').textContent = active.length ? '關閉面板仍會繼續下載' : '按需掃描 · 瀏覽器內處理';
   $('jobs').replaceChildren();
   if (!jobs.length) { $('jobs').append(empty('還沒有下載紀錄。')); return; }
   jobs.slice(0, 20).forEach(job => {
@@ -86,10 +78,10 @@ function renderJobs(jobs) {
     const dimensions = height ? width && width < height ? `${width} × ${height}` : `${height}p` : '';
     meta.textContent = `${completed}${job.status === 'completed' && dimensions ? ` · ${dimensions}` : ''}${job.progress > 0 && ['downloading', 'verifying'].includes(job.status) ? ` · ${Math.round(job.progress)}%` : ''}${job.status === 'downloading' && job.speed ? ` · ${job.speed}` : ''}${job.error ? ` · ${job.error}` : ''}`;
     item.append(title, meta);
-    if (['downloading', 'processing', 'verifying'].includes(job.status)) {
+    if (['queued', 'downloading', 'processing', 'verifying', 'saving'].includes(job.status)) {
       const progress = document.createElement('progress'); progress.max = 100; if (job.progress > 0) progress.value = job.progress;
-      item.append(progress, makeButton('取消下載', () => send('cancel', {id: job.id}), 'subtle'));
-    } else if (job.status === 'completed') item.append(makeButton('在資料夾中顯示', () => job.engine === 'browser' ? send('reveal', {downloadId: job.downloadId}) : send('revealNative', {id: job.id}), 'subtle'));
+      item.append(progress); if(job.status!=='saving')item.append(makeButton('取消下載', () => send('cancel', {id: job.id}), 'subtle'));
+    } else if (job.status === 'completed' && job.downloadId != null) item.append(makeButton('在資料夾中顯示', () => send('reveal', {downloadId: job.downloadId}), 'subtle'));
     $('jobs').append(item);
   });
 }
@@ -101,7 +93,7 @@ async function scan(refresh = false) {
     const isPlatform = ['YouTube', 'Bilibili'].includes(siteName(page.url));
     const h = new URL(page.url).hostname; const bili = h.endsWith('.bilibili.com') || h === 'bilibili.com';
     $('cookie-option').hidden = !bili; $('cookie-hint').hidden = !bili;
-    $('watch').textContent = page.watching ? '停止串流偵測' : '啟用串流偵測'; $('watch-hint').hidden = !page.watching; $('helper').hidden = true;
+    $('watch').textContent = page.watching ? '停止串流偵測' : '啟用串流偵測'; $('watch-hint').hidden = !page.watching;
     if (isPlatform) await analyze(token);
     else {
       $('video').hidden = true; $('media').hidden = false;
@@ -112,18 +104,13 @@ async function scan(refresh = false) {
   finally { if (token === sequence) $('refresh').disabled = false; }
 }
 $('refresh').addEventListener('click', () => scan(true));
-['setup', 'install'].forEach(id => $(id).addEventListener('click', () => chrome.runtime.openOptionsPage()));
+$('setup').addEventListener('click', () => chrome.runtime.openOptionsPage());
 $('mode').addEventListener('change', () => { const audio = $('mode').value === 'audio'; $('quality').disabled = audio; $('container').disabled = audio; });
 $('cookies').addEventListener('change', async () => {
-  if ($('cookies').checked) {
-    try {
-      if (!await chrome.permissions.request({permissions: ['cookies'], origins: ['https://*.bilibili.com/*']})) { $('cookies').checked = false; notice('未授權，將使用公開影片權限。'); return; }
-    } catch (error) { $('cookies').checked = false; notice(error.message, true); return; }
-  }
   await analyze(++sequence); $('refresh').disabled = false;
 });
 $('start').addEventListener('click', () => run($('start'), async () => {
-  notice('請在「另存新檔」視窗選擇位置。'); const result = await send('start', options());
+  notice('正在下載與驗證。完成後會詢問儲存位置。'); const result = await send('start', options());
   notice(result.cancelled ? '已取消儲存。' : '已開始下載。'); if (!result.cancelled) $('history').open = true;
 }));
 $('watch').addEventListener('click', () => run($('watch'), async () => {
@@ -135,7 +122,6 @@ $('watch').addEventListener('click', () => run($('watch'), async () => {
   await scan();
 }));
 $('clear').addEventListener('click', () => run($('clear'), () => send('clearHistory')));
-$('platform-probe').addEventListener('click', () => run($('platform-probe'), async () => { notice(''); await analyze(++sequence); }));
 chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local' && changes.jobs) renderJobs(changes.jobs.newValue || []); });
 chrome.storage.local.get('jobs').then(data => renderJobs(data.jobs || []));
 scan();

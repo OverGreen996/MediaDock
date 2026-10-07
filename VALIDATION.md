@@ -1,60 +1,79 @@
-# 驗證紀錄
+# 0.4.0 驗證紀錄
 
-2026-10-07，MediaDock 擴充功能 0.3.0／本機助手 0.2.1，Windows x64，Node 24.21、Edge（Chromium）、.NET Framework 4.x。高畫質下載以 0.2.0 原生下載管線完成，0.2.1 補上尺寸資訊後重新完整驗證相同檔案及 SHA-256。
+2026-10-07，Windows x64、已安裝的 Edge（Chromium）、MediaDock 0.4.0 MV3。產品執行下載、影音合併及完整解碼的部分均在瀏覽器內完成，沒有呼叫本機助手、FFmpeg、yt-dlp、Node.js 或外部下載服務。Node.js／Playwright 只作為測試控制工具；FFmpeg 只用於建立下述人工測試媒體。
 
-| 項目 | 結果 |
+## 實際公開影片
+
+以下使用真正的 Edge 擴充面板、service worker、offscreen 文件及媒體 Worker，經實際平台 API／CDN 下載、瀏覽器內封裝、全部影音解碼、計算 SHA-256，再由 Chrome downloads API 保存。平台導航頁以同網址的簡單 HTML 測試頁代替；API 和媒體回應沒有模擬。測試瀏覽器獨立且未登入，不能視為使用者目前 Edge 帳號的測試。
+
+| 來源 | 儲存檔案 | 完整解碼／實際播放 |
+|---|---|---|
+| YouTube `a9LDPn-MO4I`，1440p | 2560 × 1440，MP4／VP9／AAC，60.0468 秒，47,879,911 bytes | 通過；1,500 影格，影音均完整解碼 |
+| 同影片，2160p | 3840 × 2160，MP4／VP9／AAC，60.0468 秒，107,174,837 bytes | 通過；1,500 影格，影音均完整解碼 |
+| Shorts `18NGQq7p3LY` | 2160 × 2964，MP4／VP9／AAC，3.3669 秒，6,644,839 bytes | 通過；199 影格，直向尺寸保持不變 |
+| Bilibili `BV15z4y1U7HS`，CID `295330409` | 480p，MP4／H.264／AAC，634.5660 秒，75,557,171 bytes | 通過；19,036 影格，影音均完整解碼 |
+
+全部保留原始編碼，沒有轉檔或升頻。Bili 的影像顯示寬度因像素長寬比約為 853，高度為 480。HTML video 的容器片長讀值約 634.7 秒，完整解碼的影音片長為 634.5660 秒。平台影片標題包含 4K／8K 不代表本次實際提供該畫質；只依當下可用格式列出及驗證。
+
+另以全新的 Edge 播放器讀取**上述真正儲存的檔案**：再次從磁碟串流計算 SHA-256，確認與瀏覽器驗證結果相同；測試開頭播放、10%／40%／80% 跳轉，以及片尾自然結束，四檔均通過，沒有播放器媒體錯誤。没有改換檔案或容器。播放畫面已人工檢視，測試輸出留在被忽略的 `test-output/pure/`，不發布影片與設定檔。
+
+| 檔案 | SHA-256 |
 |---|---|
-| 核心邏輯 13 項測試 | 通過；包含來源授權、Cookie 邊界、取消、分頁偵測、多平台網域界線、驗證中的紀錄保留及舊助手阻擋。YouTube 頁面只能要求開啟面板，不能直接解析／下載／讀 Cookie；只接受目前活動視窗的頂層影片頁，拒絕 iframe、其他擴充與已切換的影片 |
-| YouTube 內嵌下載按鈕 | 已透過連線瀏覽器讀取真實一般影片及 Shorts 分享按鈕 DOM，選用目前的操作列結構。實際 Edge MV3 搭配測試頁驗證：分享旁插入、淺深色、真實滑鼠點擊開啟真實擴充 popup、拒絕頁面合成 click、操作列整段替換後復原、SPA 切換不重複、回首頁移除、Shorts 垂直操作列。截圖明確標示為測試頁，沒有宣稱已在使用者目前瀏覽器安裝 |
-| Edge 真實 MV3 載入 | 通過，擴充 ID 與打包 manifest 相符 |
-| Edge 真實 Native Messaging | 通過，暫時註冊測試助手、啟動及 framing 回應，結束後恢復登錄 |
-| 面板流程 | 通過；自動解析、畫質選擇、Bilibili 當前分 P URL、其他網站列出來源、選擇來源、空白／缺助手狀態 |
-| 介面視覺與可操作性 | 淺色／深色截圖已檢查；無橫向溢出，原生下拉選單、鍵盤 focus、收起的進階設定、減少動態效果 |
-| Windows 另存新檔 | 真實 WinForms SaveFileDialog 選擇路徑及取消均通過；測試用 Win32／UI Automation，不添加產品測試後門 |
-| 本機實際 MP4／MP3 | 通過；W3Schools Big Buck Bunny 10 秒範例下載及轉檔，來源 ID 核對與完整影音解碼 |
-| 檔名與原始檔保護 | 中文、空格、百分號路徑通過；同名 MP3 轉檔不改動既有 MP4；故意注入錯誤來源 ID 的真實下載會失敗，原檔 hash 不變；暫存清理通過 |
-| YouTube 公開影片 | `YE7VzlLtp-4` 360p：H.264／AAC，596.521 秒；來源片長 597 秒。ID 比對成功，全片 14,315 影格及音訊完整解碼，Edge 實際播放與跳轉通過 |
-| Bilibili 公開影片 | `BV15z4y1U7HS` 360p：H.264／AAC，634.533 秒；來源片長 634.566 秒。ID 比對成功，全片 19,036 影格及音訊完整解碼，Edge 實際播放與跳轉通過 |
-| YouTube 1440p／4K | `a9LDPn-MO4I`，2560 × 1440 及 3840 × 2160，MKV／VP9／Opus，60.021 秒、各 1,500 影格；未重新編碼，來源 ID 與片長核對、全片影音解碼及 Edge 實際播放通過。標題雖寫 8K，本次只提供至 4K，不宣稱可下載 8K |
-| YouTube Shorts 最高可用畫質 | `18NGQq7p3LY`，2160 × 2964，MP4／H.264／AAC，3.367 秒、199 影格；來源解析片長約 3 秒。MP4 經相容轉檔，尺寸保持不變；來源核對、完整解碼與 Edge 播放通過 |
-| Bilibili 未登入 1080p | `BV15z4y1U7HS`，1920 × 1080，MP4／H.264／AAC，634.533 秒、19,036 影格。未帶任何帳號 Cookie，完整下載、來源核對、全片影音解碼及 Edge 播放通過；這是單支影片結果，不能當成全部影片的登入規則 |
-| Shorts 畫質標示 | 真實原生解析回傳寬高；面板測試確認 1080 × 1482 顯示為 1080p、2160 × 2964 顯示為 2160p／4K，預設為 1080p，選擇 4K 時傳入實際高度 2964 |
-| 影音驗證 21 項案例 | 通過；有效 MP4／MP3、假 MP4 登入頁、空檔、錯誤片長／畫質、音訊冒充影片、截斷尾部、容器完整但後段 packet 損壞、缺音訊、相容 MP4 轉換、正確／錯誤 ID、分集與來源 URL，以及兩平台 360p 和四個高畫質實際下載檔的再次驗證與 hash 比對 |
-| MP4 相容編碼 | MPEG-4 Part 2 測試檔自動轉為 H.264 8-bit／AAC，重新解析及完整解碼通過；正常 H.264／AAC 免轉檔 |
-| 多平台辨識 | Vimeo、Dailymotion、Twitch、TikTok、Instagram、X、騰訊影片網域與偽造網域單元測試通過；Vimeo 的選用解析按鈕與畫質流程由 fixture 驗證 |
-| Vimeo 真實來源解析 | `1084537` 本次發生 TLS 連線錯誤；列為未通過，不宣稱已成功下載 |
-| 來源網址有效性 | YouTube 重測曾遇 403，失敗時原檔 hash 不變；加入所選格式的有效性預檢後，兩平台重新下載與完整驗證成功 |
-| 工具安裝 | 官方 Release 下載及 SHA-256 驗證通過，4 個工具執行成功；Windows PowerShell 5.1 腳本使用 UTF-8 BOM |
+| YouTube 1440p | `b36cc9267f904962c6c40917b37e2f4b5d5dead9ef1bd6af9487fb19b576f4b9` |
+| YouTube 2160p | `698d55b294707ae5220af5c6a95d24e3e4fca89c501284ec0b14742d7534049c` |
+| Shorts | `ef99b8b51e4b443b9b0f23c971e799cb04334b8db988c5562cbeb217138422b6` |
+| Bilibili 480p | `eca3694df0a0035e471d5cfe19ec71b15f7622ac66bb83b1bd572e5e1bc0bbbd` |
 
-實測工具：yt-dlp `2026.08.19`、FFmpeg `N-127226-gdc234edb2c-20261006`、Deno `2.9.7`。
+## 受控媒體與介面
 
-測試限定：沒有讀取真實帳號 Cookie；Bilibili 登入功能驗證的是明確授權、網域過濾、Cookie 檔格式及清理設計，沒有測試會員專屬畫質。沒有測試所有網站、DRM、直播、全部字幕或完整播放清單。Chrome 正式版未安裝，沒有本機實測；Edge 已實測。串流偵測、HLS／DASH 分類與 DOM 掃描以測試頁及事件資料驗證，公開平台影音合併則以真實下載驗證。其他平台能否下載以該來源實際解析結果為準，不把網域標籤當成成功測試。
+| 測試 | 結果 |
+|---|---|
+| 核心邏輯 16 項 | 通過：公開網址、偽造網域、網站分類、檔名、正確 YT ID、Shorts 尺寸、CDN 白名單、精確畫質／音訊／片長、Bili BV／CID／分 P／來源 URL 綁定 |
+| 訊息與儲存邊界 | 通過：一般網頁及內容腳本不能直接啟動下載，未授權来源不能下載，無驗證或外部 Blob 不可儲存；確認 `saveAs: true`，直到瀏覽器下載完成才回報完成 |
+| 真實 Edge MV3／UI | 通過：固定擴充 ID、淺深色面板、畫質與直向尺寸、Bili 當前分 P、一般媒體清單、DOM 同源 iframe 掃描。一般掃描不建立媒體引擎 |
+| YouTube 內嵌按鈕 | 真實 Edge MV3 測試頁通過：分享旁按鈕、淺深色、窄畫面、SPA 更新、操作列替換後復原、Shorts 操作列、真實使用者點擊開啟 popup、拒絕合成 click。頁面只能要求開啟面板，且必須是目前活動分頁的同一影片 |
+| MP4／HLS／DASH | 真實瀏覽器、真正 HTTP 媒體：同一 2 秒 H.264／AAC 測試影片，三種輸入均成功封裝與保存，各完整解碼 40 影格及音訊 |
+| HTML 冒充 MP4 | 失敗，訊息「來源回傳網頁或錯誤訊息，並非影片」，沒有開始儲存 |
+| 截斷 MP4 | 實際切去檔案後 40%；來源片長與分段結尾不符，失敗且沒有開始儲存，不能把尚可播放的前半段當成成功 |
+| 取消 | 慢速來源下載期間取消，任務終止，沒有開始儲存 |
+| 閒置與暫存 | 任務結束後約 10 秒關閉 offscreen，引擎釋放，檢查瀏覽器私有檔案系統沒有殘留媒體 |
+| 發布包 | 預先建置的本機 JS、完整授權；無 nativeMessaging、Cookie API 權限、安裝器、EXE 或遠端可執行程式 |
 
-Bilibili 測試採公開格式，未使用登入帳號或會員權限，因此不宣稱已驗證登入後的會員專屬畫質。
+HLS／DASH 測試只證明上述受控形式有效，不表示所有網站的串流格式都支援。其他網站的選用來源權限由受控測試預先授予；權限拒絕由核心測試驗證。UI 預覽使用固定資料，不能作為平台畫質成功的證據。
 
-播放檢查：Edge 從實際本機下載檔串流讀取，測試開頭播放、跳轉至 60／240／500 秒及片尾自然結束；不是 popup 模擬。`test-output/verified-content.png` 是播放檔案所抽取的畫面。完整解碼負責檢查全部影音；瀏覽器播放測試是上述時間點抽查。來源 ID／URL 與片長比對不能替使用者判斷每個頁面資源是否為所要的主片，清單中的廣告／預告需要自行選擇。
+自動化儲存使用 CDP 接受下載至測試目錄，沒有在桌面實際點擊原生另存新檔對話框；產品確實傳入 `saveAs: true`，此項呼叫亦有核心測試。日常使用者已登入的 Edge 設定檔安裝與帳號實測未完成，不能宣稱已在該設定檔安裝或驗證。
 
-高畫質檔的 Edge 播放測試使用原下載檔，沒有替 MKV 換容器。逐一測試開頭播放、10%／40%／80% 跳轉及片尾自然結束，沒有媒體錯誤。`test-output/high-quality/report.json` 保存來源識別、格式、片長、完整解碼結果及 hash；`playback-report.json` 保存實際播放器結果，`verified-content.png` 是該檔案抽出的實際畫面。抽查不是逐幀內容辨識，全部影音完整性由完整解碼負責。
+## 尚未驗證與限制
 
-一般公開樣本為 Blender Big Buck Bunny；高畫質與 Shorts 樣本取自 yt-dlp 官方 extractor 測試網址。下載檔與匿名解析資料只在 `test-output/`，不包含於發行包。面板截圖使用固定測試資料，不代表所有影片都可提供該畫質。
+- **Bili 使用者已登入的 1080p、會員／4K 畫質尚未驗證。** 本次公開 API 僅回傳至 480p，不沿用 0.3 本機助手的 1080p 結果當作 0.4 的證據。
+- Chrome 正式版未在本機測試；Edge 已測試。其他網站的真實下載沒有全面測試。
+- DRM、加密 HLS、直播、多 Period／動態 DASH、byte range SegmentList、全部播放清單與字幕不支援。來源網站 API、登入政策與反爬可能變動。
+- 瀏覽器能完整解碼的原始編碼才允許儲存；沒有全格式相容轉檔。Edge 播放通過不代表所有第三方播放器都相容。
+- 原始來源的 ID、網址、片長與完整性驗證不能替使用者判斷一般網頁清單裡的廣告、預告是否為想保存的內容。
 
 ## 重現
 
+從儲存庫根目錄，以 Node.js／pnpm 與已安裝的 Edge 執行：
+
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Build.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Install.ps1 -ToolsOnly -TargetRoot test-output/runtime
-Copy-Item native/MediaDockHost.exe test-output/runtime/native/
-node --test tests/core.test.mjs
-node tests/ui-smoke.mjs
-node tests/youtube-button-smoke.mjs
-powershell -NoProfile -ExecutionPolicy Bypass -File tests/RegistrySmoke.ps1
-node tests/native-smoke.mjs --live
-node tests/verification-smoke.mjs
-node tests/playback-smoke.mjs
-node tests/high-quality-validation.mjs
-node tests/native-smoke.mjs --shorts
-node tests/verification-smoke.mjs
-node tests/playback-smoke.mjs --high-quality
+pnpm install --frozen-lockfile
+pnpm run build
+pnpm test
+pnpm run test:ui
+pnpm run test:youtube-button
+pnpm run test:fixtures
 ```
 
-UI 與播放測試需要 Playwright；可透過 `CODEX_NODE_MODULES` 指定包含 Playwright 的 node_modules。下載／對話框測試需先編譯 `tests/NativeDownloadHarness.cs`、`tests/SaveDialogSmoke.cs`、`tests/VerificationHarness.cs`，將 EXE 複製至 `test-output/runtime/native/`，再執行 `download-smoke.mjs`、`dialog-smoke.mjs`、`platform-download-smoke.mjs`。VerificationHarness 的編譯需引用 System.Web.Extensions.dll。SaveDialogSmoke 的編譯需引用 Framework `WPF/UIAutomationClient.dll`、`UIAutomationTypes.dll`、`WindowsBase.dll`。對話框測試會短暫顯示測試用原生儲存視窗。先執行 MP4／MP3 及平台下載測試，再執行驗證與播放測試。
+`test:fixtures` 需另外具備開發用 FFmpeg（PATH 或 `MEDIA_DOCK_TEST_FFMPEG` 指定執行檔），在 `test-output/pure/fixtures/` 生成人工媒體。這不是使用擴充功能的必要條件。
+
+真實來源測試會下載影片，網站／網路狀態可能令結果不同：
+
+```powershell
+pnpm run test:live -- youtube 1440
+pnpm run test:live -- youtube 2160
+pnpm run test:live -- shorts 2964
+pnpm run test:live -- bili best
+pnpm run test:playback
+```
+
+播放測試依賴前四項產生的實際檔案與報告；每個測試使用獨立設定檔，不載入使用者登入資料。打包：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Build.ps1`。舊版 native 測試保留在 v0.3.0 的 Git 歷史，與本版結果分開。

@@ -1,28 +1,23 @@
 ﻿$ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path $PSScriptRoot -Parent
-$taskCompiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
-Push-Location (Join-Path $taskRoot 'native')
-try {
-    & $taskCompiler /nologo /optimize+ /target:exe /reference:System.Web.Extensions.dll /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /out:MediaDockHost.exe MediaDockHost.cs
-    if ($LASTEXITCODE -ne 0) { throw '本機助手編譯失敗。' }
-} finally { Pop-Location }
-$taskStage = Join-Path $taskRoot 'dist\MediaDock'
+$taskStage = Join-Path $taskRoot 'dist\MediaDock-0.4.0'
+$taskResolvedStage = [IO.Path]::GetFullPath($taskStage)
+$taskDistRoot = [IO.Path]::GetFullPath((Join-Path $taskRoot 'dist')) + [IO.Path]::DirectorySeparatorChar
+if (-not $taskResolvedStage.StartsWith($taskDistRoot, [StringComparison]::OrdinalIgnoreCase)) { throw '發布路徑超出 dist。' }
+if (Test-Path -LiteralPath $taskResolvedStage) { Remove-Item -LiteralPath $taskResolvedStage -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $taskStage | Out-Null
-foreach ($taskName in @('extension','native','scripts')) {
-    $taskTo = Join-Path $taskStage $taskName
-    New-Item -ItemType Directory -Force -Path $taskTo | Out-Null
-    Get-ChildItem -LiteralPath (Join-Path $taskRoot $taskName) -File | Copy-Item -Destination $taskTo -Force
-    if ($taskName -eq 'extension') { Copy-Item -LiteralPath (Join-Path $taskRoot 'extension\icons') -Destination $taskTo -Recurse -Force }
-}
-foreach ($taskName in @('Install.cmd','Update.cmd','Uninstall.cmd','README.md','THIRD-PARTY.md','VALIDATION.md','package.json')) { Copy-Item -LiteralPath (Join-Path $taskRoot $taskName) -Destination $taskStage -Force }
-if (Test-Path -LiteralPath (Join-Path $taskRoot 'docs')) { Copy-Item -LiteralPath (Join-Path $taskRoot 'docs') -Destination $taskStage -Recurse -Force }
-$taskTests = Join-Path $taskStage 'tests'
-New-Item -ItemType Directory -Force -Path $taskTests | Out-Null
-Get-ChildItem -LiteralPath (Join-Path $taskRoot 'tests') -File | Where-Object { $_.Extension -ne '.exe' } | Copy-Item -Destination $taskTests -Force
-# Windows PowerShell 5.1 needs a BOM for non-ASCII script text.
-foreach ($taskScript in Get-ChildItem -LiteralPath (Join-Path $taskStage 'scripts') -Filter '*.ps1') {
-    [IO.File]::WriteAllText($taskScript.FullName, [IO.File]::ReadAllText($taskScript.FullName), (New-Object Text.UTF8Encoding $true))
-}
-$taskZip = Join-Path $taskRoot 'dist\MediaDock-Windows.zip'
+# The shipped bundle is already built. End users need no Node, package manager or installer.
+Copy-Item -Path (Join-Path $taskRoot 'extension\*') -Destination $taskStage -Recurse -Force
+foreach ($taskName in @('README.md','THIRD-PARTY.md','VALIDATION.md')) { Copy-Item -LiteralPath (Join-Path $taskRoot $taskName) -Destination $taskStage -Force }
+$taskPackagedReadme = Join-Path $taskStage 'README.md'
+$taskReadmeText = [IO.File]::ReadAllText($taskPackagedReadme).Replace('src="extension/icons/128.png"', 'src="icons/128.png"')
+[IO.File]::WriteAllText($taskPackagedReadme, $taskReadmeText, (New-Object Text.UTF8Encoding $false))
+Copy-Item -LiteralPath (Join-Path $taskRoot 'licenses') -Destination $taskStage -Recurse -Force
+Copy-Item -LiteralPath (Join-Path $taskRoot 'docs') -Destination $taskStage -Recurse -Force
+if (Get-ChildItem -LiteralPath $taskStage -Recurse -File | Where-Object { $_.Extension -in @('.exe','.cmd','.ps1','.bat') }) { throw '純擴充發布包不能包含安裝器或執行檔。' }
+$taskZip = Join-Path $taskRoot 'dist\MediaDock-Extension.zip'
 Compress-Archive -Path $taskStage -DestinationPath $taskZip -Force
-Write-Host "發布包：$taskZip"
+$taskHash = (Get-FileHash -LiteralPath $taskZip -Algorithm SHA256).Hash.ToLowerInvariant()
+[IO.File]::WriteAllText((Join-Path $taskRoot 'dist\SHA256SUMS.txt'), "$taskHash  MediaDock-Extension.zip`n", (New-Object Text.UTF8Encoding $false))
+Write-Host "純擴充發布包：$taskZip"
+Write-Host "SHA256：$taskHash"
