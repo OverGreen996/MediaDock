@@ -1,0 +1,8 @@
+dist/
+native/*.exe
+native/tools/
+native/private/
+test-output/
+tests/*.exe
+tests/private/
+node_modules/

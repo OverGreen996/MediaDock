@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "MediaDock 媒體下載",
+  "version": "0.3.0",
+  "description": "多平台影片與媒體來源偵測，選畫質與儲存位置，下載後核對來源及完整影音驗證。",
+  "minimum_chrome_version": "127",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuaegTkRhJfbBRJfx5Mcigv2eHkwIJGP/CAu8/ra7T5ZqQHvysczhufs7DbYUo9tldz4RuwDVOx7QIPzi2ERNF4p3mGH+GfYLOaZGy/qXZuoToMzRSkeh8Tts2fNSrEqYL+JWJHEnaDdL9QJz+6YfC8HTut7fZoUQr5XpzXIVifbuZ2Y9HYl4HIe1VGiBqq7WvxSdecZwfdI5ihRdfd40x7NQLVHQLBEbRQrBnkUJtOL1o9k5oREPF4KjaqG+D5sidMgBnptZMlRIcKjymiD9ZiyDdVEbidazvQE3gU3akIhVcDilWU1vcqITxbjHAscemao0I2EXzkRLiO2sqQ7CmwIDAQAB",
+  "permissions": ["activeTab", "scripting", "downloads", "storage", "nativeMessaging", "webRequest"],
+  "optional_permissions": ["cookies"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "host_permissions": ["https://www.youtube.com/*"],
+  "content_scripts": [{"matches": ["https://www.youtube.com/*"], "js": ["youtube-button.js"], "run_at": "document_idle"}],
+  "background": {"service_worker": "background.js", "type": "module"},
+  "action": {"default_popup": "popup.html", "default_title": "MediaDock 媒體下載"},
+  "icons": {"16": "icons/16.png", "48": "icons/48.png", "128": "icons/128.png"},
+  "options_page": "setup.html",
+  "content_security_policy": {"extension_pages": "script-src 'self'; object-src 'none'"}
+}
