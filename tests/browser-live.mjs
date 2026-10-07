@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 const out=path.resolve('test-output/pure');fs.mkdirSync(out,{recursive:true});
 const kind=process.argv[2]||'youtube',quality=process.argv[3]||'2160';
 const forceHls=process.argv.includes('--force-hls'),forceBackup=process.argv.includes('--force-backup');
+const timeoutSeconds=Number(process.argv.find(a=>a.startsWith('--timeout-seconds='))?.split('=')[1]||360);assert.ok(Number.isInteger(timeoutSeconds)&&timeoutSeconds>=30&&timeoutSeconds<=1800,'Test timeout must be between 30 and 1800 seconds');
 const suffix=forceHls?'-hls':forceBackup?'-backup':'';
 const ctx=await chromium.launchPersistentContext(path.join(out,`edge-profile-${kind}-${quality}${suffix}-${Date.now()}`),{channel:'msedge',headless:true,acceptDownloads:true,args:[`--disable-extensions-except=${path.resolve('extension')}`,`--load-extension=${path.resolve('extension')}`]});
 try{
@@ -31,7 +32,7 @@ try{
  assert.equal(await evaluate(`document.querySelector('#start').disabled`),false,'Platform parsing failed');
  await evaluate(`document.querySelector('#quality').value=${JSON.stringify(quality)};document.querySelector('#start').click();`);
  const expectFailure=process.argv.includes('--expect-failure');let jobs,last='',preflightError='';
- for(let i=0;i<360;i++){
+ for(let i=0;i<timeoutSeconds;i++){
    jobs=(await worker.evaluate(()=>chrome.storage.local.get('jobs'))).jobs||[];
    const j=jobs[0];const status=j?j.status+' '+Math.round(j.progress||0):'waiting';if(status!==last){console.log(status,j?.error||'');last=status;}
    preflightError=await evaluate(`document.querySelector('#message').dataset.error==='true'?document.querySelector('#message').textContent:''`);if(preflightError){console.log('PREFLIGHT ERROR',preflightError);break;}
